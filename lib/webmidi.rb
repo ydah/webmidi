@@ -10,6 +10,7 @@ require_relative "webmidi/access"
 require_relative "webmidi/virtual"
 require_relative "webmidi/smf"
 require_relative "webmidi/middleware"
+require_relative "webmidi/music"
 
 module Webmidi
 end
