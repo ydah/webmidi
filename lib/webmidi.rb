@@ -8,6 +8,7 @@ require_relative "webmidi/transport"
 require_relative "webmidi/port"
 require_relative "webmidi/access"
 require_relative "webmidi/virtual"
+require_relative "webmidi/smf"
 
 module Webmidi
 end
