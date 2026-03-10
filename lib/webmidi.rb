@@ -11,6 +11,8 @@ require_relative "webmidi/virtual"
 require_relative "webmidi/smf"
 require_relative "webmidi/middleware"
 require_relative "webmidi/music"
+require_relative "webmidi/network"
+require_relative "webmidi/clock"
 
 module Webmidi
 end
