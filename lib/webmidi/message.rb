@@ -4,6 +4,7 @@ require_relative "message/base"
 require_relative "message/channel"
 require_relative "message/system"
 require_relative "message/parser"
+require_relative "message/ump"
 
 module Webmidi
   module Message
@@ -83,6 +84,14 @@ module Webmidi
     def self.from_bytes(*bytes)
       bytes = bytes.flatten
       Parser.parse_single(bytes)
+    end
+
+    def self.upgrade(midi1_message)
+      UMP.upgrade(midi1_message)
+    end
+
+    def self.downgrade(midi2_message)
+      UMP.downgrade(midi2_message)
     end
   end
 end
