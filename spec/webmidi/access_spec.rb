@@ -91,6 +91,15 @@ RSpec.describe Webmidi::Access do
 
       expect(access.input("In")).to be_nil
     end
+
+    it "opens transport handles for existing virtual outputs" do
+      handle = Webmidi::Transport::Virtual.create_virtual_output("Existing Out")
+      access = described_class.new(transport: Webmidi::Transport::Virtual)
+
+      access.output("Existing Out").send(Webmidi::Message.note_on(60))
+
+      expect(handle.sent_messages).to eq([[0x90, 60, 100]])
+    end
   end
 end
 

@@ -34,6 +34,20 @@ module Webmidi
         handle
       end
 
+      def self.open_input(device_info)
+        handle = find_handle(device_info.id, VirtualInputHandle)
+        return handle if handle
+
+        raise PortNotFoundError, "Virtual input not found: #{device_info.id}"
+      end
+
+      def self.open_output(device_info)
+        handle = find_handle(device_info.id, VirtualOutputHandle)
+        return handle if handle
+
+        raise PortNotFoundError, "Virtual output not found: #{device_info.id}"
+      end
+
       def self.create_loopback(name)
         input = create_virtual_input(name)
         output = create_virtual_output(name)
@@ -54,7 +68,15 @@ module Webmidi
       def self.unregister(id)
         @mutex.synchronize { @ports.delete(id) }
       end
+
+      def self.find_handle(id, handle_class)
+        @mutex.synchronize do
+          handle = @ports[id]
+          handle if handle.is_a?(handle_class) && !handle.closed?
+        end
+      end
       private_class_method :generate_id
+      private_class_method :find_handle
 
       class VirtualInputHandle
         include InputHandle

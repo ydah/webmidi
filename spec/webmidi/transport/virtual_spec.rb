@@ -37,6 +37,26 @@ RSpec.describe Webmidi::Transport::Virtual do
     end
   end
 
+  describe ".open_input / .open_output" do
+    it "returns existing open virtual handles by device info" do
+      input = described_class.create_virtual_input("Input")
+      output = described_class.create_virtual_output("Output")
+
+      expect(described_class.open_input(input.device_info)).to eq(input)
+      expect(described_class.open_output(output.device_info)).to eq(output)
+    end
+
+    it "raises when the handle is missing or has the wrong direction" do
+      input = described_class.create_virtual_input("Input")
+      input.close
+
+      expect { described_class.open_input(input.device_info) }
+        .to raise_error(Webmidi::PortNotFoundError)
+      expect { described_class.open_output(input.device_info) }
+        .to raise_error(Webmidi::PortNotFoundError)
+    end
+  end
+
   describe "VirtualInputHandle" do
     it "can read pushed messages" do
       handle = described_class.create_virtual_input("Test Input")

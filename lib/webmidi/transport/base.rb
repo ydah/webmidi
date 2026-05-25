@@ -15,19 +15,19 @@ module Webmidi
         raise NotImplementedError
       end
 
-      def open_input(device_info)
+      def self.open_input(device_info)
         raise NotImplementedError
       end
 
-      def open_output(device_info)
+      def self.open_output(device_info)
         raise NotImplementedError
       end
 
-      def create_virtual_input(name)
+      def self.create_virtual_input(name)
         raise NotImplementedError
       end
 
-      def create_virtual_output(name)
+      def self.create_virtual_output(name)
         raise NotImplementedError
       end
     end
