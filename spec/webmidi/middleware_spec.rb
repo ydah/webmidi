@@ -194,6 +194,71 @@ RSpec.describe Webmidi::Middleware::Throttle do
   end
 end
 
+RSpec.describe Webmidi::Middleware::Panic do
+  it "builds all-notes-off messages for selected channels" do
+    messages = described_class.all_notes_off(channels: [0, 2], timestamp: 12.0)
+
+    expect(messages.map(&:to_bytes)).to eq([[0xB0, 123, 0], [0xB2, 123, 0]])
+    expect(messages.map(&:timestamp)).to eq([12.0, 12.0])
+  end
+
+  it "expands the trigger message into panic controls" do
+    panic = described_class.new(->(msg) { msg }, channels: 0, controls: [:all_notes_off])
+    trigger = Webmidi::Message.system_reset(timestamp: 12.0)
+
+    result = panic.call(trigger)
+
+    expect(result.map(&:to_bytes)).to eq([[0xB0, 123, 0]])
+    expect(result.first.timestamp).to eq(12.0)
+  end
+
+  it "passes non-trigger messages through" do
+    msg = Webmidi::Message.note_on(60)
+    panic = described_class.new(->(message) { message }, channels: 0)
+
+    expect(panic.call(msg)).to eq(msg)
+  end
+end
+
+RSpec.describe Webmidi::Middleware::SplitByChannel do
+  it "routes matching channel messages and consumes them by default" do
+    routed = []
+    fallback = []
+    splitter = described_class.new(
+      ->(msg) {
+        fallback << msg
+        msg
+      },
+      routes: {0 => ->(msg) { routed << msg }}
+    )
+    msg = Webmidi::Message.note_on(60, channel: 0)
+
+    expect(splitter.call(msg)).to be_nil
+    expect(routed).to eq([msg])
+    expect(fallback).to be_empty
+  end
+
+  it "passes unmatched messages downstream" do
+    msg = Webmidi::Message.note_on(60, channel: 1)
+    splitter = described_class.new(->(message) { message }, routes: {0 => ->(_) {}})
+
+    expect(splitter.call(msg)).to eq(msg)
+  end
+
+  it "can pass routed messages downstream too" do
+    routed = []
+    splitter = described_class.new(
+      ->(msg) { msg.with(channel: 3) },
+      routes: {0 => ->(msg) { routed << msg }},
+      passthrough: true
+    )
+    msg = Webmidi::Message.note_on(60, channel: 0)
+
+    expect(splitter.call(msg).channel).to eq(3)
+    expect(routed).to eq([msg])
+  end
+end
+
 RSpec.describe Webmidi::Middleware::Logger do
   it "logs messages" do
     output = StringIO.new

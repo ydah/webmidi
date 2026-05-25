@@ -171,6 +171,17 @@ RSpec.describe Webmidi::Port::Output do
       port.note_on(60)
       expect(output_handle.sent_messages).to be_empty
     end
+
+    it "sends message arrays returned by middleware without flattening bytes" do
+      stack = Webmidi::Middleware::Stack.new do
+        use Webmidi::Middleware::Panic, channels: 0, controls: [:all_notes_off]
+      end
+      port.use(stack)
+
+      port.send(Webmidi::Message.system_reset)
+
+      expect(output_handle.sent_messages).to eq([[0xB0, 123, 0]])
+    end
   end
 
   describe "#all_notes_off" do

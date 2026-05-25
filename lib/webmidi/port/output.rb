@@ -116,7 +116,9 @@ module Webmidi
         when Message::Base
           [message.to_bytes]
         when Array
-          Message.parse_many(message, normalize_note_on_zero: false).map(&:to_bytes)
+          return Message.parse_many(message, normalize_note_on_zero: false).map(&:to_bytes) if message.all?(Integer)
+
+          message.compact.flat_map { |item| outbound_byte_messages(item) }
         else
           raise InvalidMessageError, "Expected Message or byte Array, got #{message.class}"
         end

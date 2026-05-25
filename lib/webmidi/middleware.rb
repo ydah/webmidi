@@ -10,6 +10,8 @@ require_relative "middleware/channel_map"
 require_relative "middleware/note_range_filter"
 require_relative "middleware/velocity_clamp"
 require_relative "middleware/timing_gate"
+require_relative "middleware/panic"
+require_relative "middleware/split_by_channel"
 require_relative "middleware/recorder"
 require_relative "middleware/pipeline"
 
