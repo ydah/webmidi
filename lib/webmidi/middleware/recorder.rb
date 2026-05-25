@@ -45,9 +45,9 @@ module Webmidi
       end
 
       class Tape
-        def initialize
-          @messages = []
-          @start_time = nil
+        def initialize(entries: [], start_time: nil)
+          @messages = entries.map(&:dup)
+          @start_time = start_time
           @mutex = Mutex.new
         end
 
@@ -78,6 +78,7 @@ module Webmidi
         end
 
         def play_from(time, output, speed: 1.0)
+          validate_speed!(speed)
           entries = snapshot.select { |e| e[:time] >= time }
           last_time = time
 
@@ -96,21 +97,25 @@ module Webmidi
         end
 
         def slice(from, to)
-          new_tape = Tape.new
-          snapshot.select { |e| e[:time] >= from && e[:time] <= to }.each do |entry|
-            new_tape.instance_variable_get(:@messages) << {
+          entries = snapshot.select { |e| e[:time] >= from && e[:time] <= to }.map do |entry|
+            {
               message: entry[:message],
               time: entry[:time] - from
             }
           end
-          new_tape.instance_variable_set(:@start_time, 0.0)
-          new_tape
+          Tape.new(entries: entries, start_time: 0.0)
         end
 
         private
 
         def snapshot
           @mutex.synchronize { @messages.map(&:dup) }
+        end
+
+        def validate_speed!(speed)
+          return if speed.is_a?(Numeric) && speed.positive?
+
+          raise InvalidMessageError, "Playback speed must be positive, got #{speed.inspect}"
         end
       end
     end

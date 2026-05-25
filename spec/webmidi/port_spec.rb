@@ -156,6 +156,23 @@ RSpec.describe Webmidi::Port::Output do
     end
   end
 
+  describe "#use" do
+    it "applies middleware before sending" do
+      port.use(Webmidi::Middleware::Transpose, semitones: 2)
+      port.note_on(60)
+      expect(output_handle.sent_messages).to eq([[0x90, 62, 100]])
+    end
+
+    it "drops messages when middleware returns nil" do
+      stack = Webmidi::Middleware::Stack.new do
+        use Webmidi::Middleware::NoteRangeFilter, min: 70, max: 80
+      end
+      port.use(stack)
+      port.note_on(60)
+      expect(output_handle.sent_messages).to be_empty
+    end
+  end
+
   describe "#all_notes_off" do
     it "sends CC 123 on specified channel" do
       port.all_notes_off(channel: 0)
@@ -249,6 +266,28 @@ RSpec.describe Webmidi::Port::Input do
       port.close
       port.dispatch([0x90, 60, 100])
       expect(received).to be_empty
+    end
+  end
+
+  describe "#pipe" do
+    it "pipes input messages through middleware to an output" do
+      output_handle = Webmidi::Transport::Virtual.create_virtual_output("Pipe Output")
+      output = Webmidi::Port::Output.new(
+        id: "pipe-out",
+        name: "Pipe Output",
+        manufacturer: "Test",
+        version: "1.0",
+        transport_handle: output_handle
+      )
+      stack = Webmidi::Middleware::Stack.new do
+        use Webmidi::Middleware::Transpose, semitones: 1
+      end
+
+      subscription = port.pipe(stack).to(output)
+      port.dispatch([0x90, 60, 100])
+
+      expect(output_handle.sent_messages).to eq([[0x90, 61, 100]])
+      subscription.unsubscribe
     end
   end
 end

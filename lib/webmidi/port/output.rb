@@ -7,6 +7,7 @@ module Webmidi
     class Output < Base
       def initialize(**kwargs)
         super(**kwargs, type: :output)
+        @middleware_stack = nil
         @scheduled_messages = []
         @scheduler_mutex = Mutex.new
         @scheduler_cv = ConditionVariable.new
@@ -16,6 +17,9 @@ module Webmidi
 
       def send(message, timestamp: nil)
         open unless open?
+        message = apply_middleware(message)
+        return self unless message
+
         byte_messages = outbound_byte_messages(message)
         byte_messages.each { |bytes| ensure_sysex_permitted!(bytes) }
 
@@ -73,6 +77,18 @@ module Webmidi
         send(message)
       end
 
+      def use(middleware = nil, **options, &block)
+        require_relative "../middleware"
+
+        @middleware_stack ||= Middleware::Stack.new
+        if middleware.is_a?(Middleware::Stack) && options.empty? && !block
+          @middleware_stack = middleware
+        else
+          @middleware_stack.use(middleware || block, **options)
+        end
+        self
+      end
+
       def send_all(*messages)
         items = if messages.size == 1 && messages.first.is_a?(Array) &&
                    messages.first.all? { |message| message.is_a?(Message::Base) }
@@ -90,6 +106,12 @@ module Webmidi
       end
 
       private
+
+      def apply_middleware(message)
+        return message unless @middleware_stack
+
+        @middleware_stack.call(message)
+      end
 
       def outbound_byte_messages(message)
         case message

@@ -91,6 +91,12 @@ module Webmidi
         each(**kwargs).lazy
       end
 
+      def pipe(stack = nil)
+        require_relative "../middleware/pipeline"
+
+        Middleware::Pipeline.new(self, stack)
+      end
+
       def dispatch(bytes)
         return unless open?
 

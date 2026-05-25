@@ -138,6 +138,56 @@ RSpec.describe Webmidi::Middleware::VelocityScale do
   end
 end
 
+RSpec.describe Webmidi::Middleware::ChannelMap do
+  it "remaps channel messages" do
+    mapper = described_class.new(->(msg) { msg }, from: 0, to: 3)
+    expect(mapper.call(Webmidi::Message.note_on(60, channel: 0)).channel).to eq(3)
+  end
+
+  it "leaves system messages unchanged" do
+    mapper = described_class.new(->(msg) { msg }, from: 0, to: 3)
+    msg = Webmidi::Message.clock
+    expect(mapper.call(msg)).to eq(msg)
+  end
+end
+
+RSpec.describe Webmidi::Middleware::NoteRangeFilter do
+  it "filters note messages outside range" do
+    filter = described_class.new(->(msg) { msg }, min: 60, max: 72)
+    expect(filter.call(Webmidi::Message.note_on(60))).not_to be_nil
+    expect(filter.call(Webmidi::Message.note_on(50))).to be_nil
+  end
+end
+
+RSpec.describe Webmidi::Middleware::VelocityClamp do
+  it "clamps note velocity" do
+    clamp = described_class.new(->(msg) { msg }, min: 20, max: 80)
+    expect(clamp.call(Webmidi::Message.note_on(60, velocity: 100)).velocity).to eq(80)
+  end
+end
+
+RSpec.describe Webmidi::Middleware::Debounce do
+  it "drops repeated messages inside the interval" do
+    debounce = described_class.new(->(msg) { msg }, interval: 1.0)
+    first = Webmidi::Message.note_on(60, timestamp: 10.0)
+    second = Webmidi::Message.note_on(60, timestamp: 10.5)
+
+    expect(debounce.call(first)).to eq(first)
+    expect(debounce.call(second)).to be_nil
+  end
+end
+
+RSpec.describe Webmidi::Middleware::Throttle do
+  it "drops messages inside the global interval" do
+    throttle = described_class.new(->(msg) { msg }, interval: 1.0)
+    first = Webmidi::Message.note_on(60, timestamp: 10.0)
+    second = Webmidi::Message.note_on(61, timestamp: 10.5)
+
+    expect(throttle.call(first)).to eq(first)
+    expect(throttle.call(second)).to be_nil
+  end
+end
+
 RSpec.describe Webmidi::Middleware::Logger do
   it "logs messages" do
     output = StringIO.new
@@ -179,5 +229,25 @@ RSpec.describe Webmidi::Middleware::Recorder do
     end.to raise_error(RuntimeError, "boom")
 
     expect(recorder.recording?).to be false
+  end
+
+  it "validates playback speed" do
+    recorder = described_class.new
+    tape = recorder.record { recorder.call(Webmidi::Message.note_on(60)) }
+    output = instance_double(Webmidi::Port::Output)
+
+    expect { tape.play(output, speed: 0) }.to raise_error(Webmidi::InvalidMessageError)
+  end
+
+  it "slices tapes without mutating the original" do
+    recorder = described_class.new
+    recorder.record do
+      recorder.call(Webmidi::Message.note_on(60, timestamp: 1.0))
+      recorder.call(Webmidi::Message.note_on(64, timestamp: 2.0))
+    end
+
+    sliced = recorder.tape.slice(0.5, 1.5)
+    expect(sliced.message_count).to eq(1)
+    expect(recorder.tape.message_count).to eq(2)
   end
 end
