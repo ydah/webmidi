@@ -1,5 +1,10 @@
 # Webmidi
 
+[![Ruby](https://github.com/ydah/webmidi/actions/workflows/main.yml/badge.svg)](https://github.com/ydah/webmidi/actions/workflows/main.yml)
+[![Gem Version](https://img.shields.io/gem/v/webmidi.svg)](https://rubygems.org/gems/webmidi)
+[![Ruby Version](https://img.shields.io/badge/ruby-%3E%3D%203.2-red.svg)](webmidi.gemspec)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
+
 Webmidi is a pure-Ruby MIDI library inspired by the W3C Web MIDI API.
 It provides MIDI messages, ports, Standard MIDI File I/O, middleware,
 network MIDI, and MIDI 2.0 UMP support with zero runtime dependencies.
