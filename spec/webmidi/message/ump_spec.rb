@@ -238,6 +238,20 @@ RSpec.describe Webmidi::Message::UMP do
       expect(copy.timestamp).to eq(12.0)
     end
 
+    it "updates raw first-word group when copied with a new group" do
+      msg = Webmidi::Message::UMP::Data64.new(words: [0x30000000, 0x00000000])
+      copy = msg.with(group: 2)
+
+      expect(copy.group).to eq(2)
+      expect(copy.words).to eq([0x32000000, 0x00000000])
+    end
+
+    it "rejects unknown raw message types with an InvalidMessageError" do
+      expect do
+        Webmidi::Message::UMP::Raw.new(message_type: :unknown, words: [0x30000000, 0x00000000])
+      end.to raise_error(Webmidi::InvalidMessageError, /Unknown UMP message type/)
+    end
+
     it "rejects raw words with a mismatched message type" do
       expect do
         Webmidi::Message::UMP::Data64.new(words: [0x20000000, 0x00000000])

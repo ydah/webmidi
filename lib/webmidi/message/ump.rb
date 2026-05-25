@@ -112,6 +112,7 @@ module Webmidi
 
         def initialize(message_type:, words:, group: 0, timestamp: nil)
           words = normalize_words!(words)
+          validate_message_type!(message_type)
           validate_word_count!(message_type, words)
           validate_range!(group, "Group", 0, 15)
           validate_word_header!(message_type, group, words.first)
@@ -127,7 +128,21 @@ module Webmidi
           super.merge(words: @words)
         end
 
+        def with(**changes)
+          changes = changes.dup
+          next_timestamp = changes.key?(:timestamp) ? changes.delete(:timestamp) : @timestamp
+          attributes = constructor_attributes.merge(changes)
+          attributes[:words] = words_with_group(attributes[:words], attributes[:group])
+          self.class.new(**attributes, timestamp: next_timestamp)
+        end
+
         private
+
+        def words_with_group(words, group)
+          next_words = words.dup
+          next_words[0] = (next_words[0] & 0xF0FF_FFFF) | (group << 24)
+          next_words
+        end
 
         def normalize_words!(words)
           unless words.respond_to?(:each)
