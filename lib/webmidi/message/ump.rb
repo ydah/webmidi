@@ -42,6 +42,29 @@ module Webmidi
         note_off note_on poly_pressure control_change program_change channel_pressure pitch_bend
       ].freeze
 
+      MIDI1_CHANNEL_VOICE_TO_UMP = {
+        Channel::NoteOff => {status: :note_off, data: :note, value: :velocity, scale: :scale_7_to_16},
+        Channel::NoteOn => {status: :note_on, data: :note, value: :velocity, scale: :scale_7_to_16},
+        Channel::PolyphonicPressure => {status: :poly_pressure, data: :note, value: :pressure, scale: :scale_7_to_16},
+        Channel::ControlChange => {status: :control_change, data: :cc, value: :value, scale: :scale_7_to_32},
+        Channel::ProgramChange => {status: :program_change, data: :program},
+        Channel::ChannelPressure => {status: :channel_pressure, value: :pressure, scale: :scale_7_to_32},
+        Channel::PitchBend => {status: :pitch_bend, value: :value, scale: :scale_14_to_32}
+      }.freeze
+
+      UMP_CHANNEL_VOICE_TO_MIDI1 = {
+        note_off: {class: Channel::NoteOff, fields: {note: :note, velocity: [:velocity, :scale_16_to_7]}},
+        note_on: {class: Channel::NoteOn, fields: {note: :note, velocity: [:velocity, :scale_16_to_7]}},
+        poly_pressure: {
+          class: Channel::PolyphonicPressure,
+          fields: {note: :note, pressure: [:velocity, :scale_16_to_7]}
+        },
+        control_change: {class: Channel::ControlChange, fields: {cc: :note, value: [:velocity, :scale_32_to_7]}},
+        program_change: {class: Channel::ProgramChange, fields: {program: :note}},
+        channel_pressure: {class: Channel::ChannelPressure, fields: {pressure: [:velocity, :scale_32_to_7]}},
+        pitch_bend: {class: Channel::PitchBend, fields: {value: [:velocity, :scale_32_to_14]}}
+      }.freeze
+
       class Base < Message::Base
         attr_reader :message_type, :group
 
@@ -292,41 +315,12 @@ module Webmidi
       end
 
       def upgrade(midi1_message, group: Webmidi.configuration.default_group)
-        case midi1_message
-        when Channel::NoteOn
-          ChannelVoice64.new(
-            status: :note_on,
-            channel: midi1_message.channel,
-            note: midi1_message.note,
-            velocity: scale_7_to_16(midi1_message.velocity),
-            group: group
-          )
-        when Channel::NoteOff
-          ChannelVoice64.new(
-            status: :note_off,
-            channel: midi1_message.channel,
-            note: midi1_message.note,
-            velocity: scale_7_to_16(midi1_message.velocity),
-            group: group
-          )
-        when Channel::ControlChange
-          ChannelVoice64.new(
-            status: :control_change,
-            channel: midi1_message.channel,
-            note: midi1_message.cc,
-            velocity: scale_7_to_32(midi1_message.value),
-            group: group
-          )
-        when Channel::PitchBend
-          ChannelVoice64.new(
-            status: :pitch_bend,
-            channel: midi1_message.channel,
-            velocity: scale_14_to_32(midi1_message.value),
-            group: group
-          )
-        else
+        spec = MIDI1_CHANNEL_VOICE_TO_UMP.find { |message_class, _| midi1_message.is_a?(message_class) }&.last
+        unless spec
           raise InvalidMessageError, "Cannot upgrade #{midi1_message.class} to MIDI 2.0"
         end
+
+        ChannelVoice64.new(**upgrade_attributes(midi1_message, spec, group))
       end
 
       def downgrade(midi2_message)
@@ -397,33 +391,36 @@ module Webmidi
       end
 
       def downgrade_channel_voice64(message)
-        case message.status
-        when :note_on
-          Channel::NoteOn.new(
-            note: message.note,
-            velocity: scale_16_to_7(message.velocity),
-            channel: message.channel
-          )
-        when :note_off
-          Channel::NoteOff.new(
-            note: message.note,
-            velocity: scale_16_to_7(message.velocity),
-            channel: message.channel
-          )
-        when :control_change
-          Channel::ControlChange.new(
-            cc: message.note,
-            value: scale_32_to_7(message.velocity),
-            channel: message.channel
-          )
-        when :pitch_bend
-          Channel::PitchBend.new(
-            value: scale_32_to_14(message.velocity),
-            channel: message.channel
-          )
-        else
+        spec = UMP_CHANNEL_VOICE_TO_MIDI1[message.status]
+        unless spec
           raise InvalidMessageError, "Cannot downgrade status #{message.status}"
         end
+
+        spec[:class].new(**downgrade_attributes(message, spec))
+      end
+
+      def upgrade_attributes(message, spec, group)
+        attributes = {status: spec.fetch(:status), channel: message.channel, group: group}
+        attributes[:note] = message.public_send(spec[:data]) if spec[:data]
+        attributes[:velocity] = scaled_value(message.public_send(spec[:value]), spec[:scale]) if spec[:value]
+        attributes
+      end
+
+      def downgrade_attributes(message, spec)
+        spec[:fields].each_with_object({channel: message.channel}) do |(target, source), attributes|
+          attributes[target] = field_value(message, source)
+        end
+      end
+
+      def field_value(message, source)
+        return message.public_send(source) unless source.is_a?(Array)
+
+        field, scale = source
+        scaled_value(message.public_send(field), scale)
+      end
+
+      def scaled_value(value, scale)
+        scale ? send(scale, value) : value
       end
 
       def type_from_word(word)
@@ -472,7 +469,8 @@ module Webmidi
       end
 
       private_class_method :parse_words, :parse_channel_voice32, :parse_channel_voice64,
-        :downgrade_channel_voice64, :type_from_word, :status_from_nibble,
+        :downgrade_channel_voice64, :upgrade_attributes, :downgrade_attributes,
+        :field_value, :scaled_value, :type_from_word, :status_from_nibble,
         :validate_words!, :scale_7_to_16, :scale_16_to_7,
         :scale_7_to_32, :scale_32_to_7, :scale_14_to_32,
         :scale_32_to_14

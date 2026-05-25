@@ -83,9 +83,42 @@ RSpec.describe Webmidi::Message::UMP do
       expect(midi2.velocity).to eq(2_164_392_968)
     end
 
+    it "converts PolyphonicPressure" do
+      midi1 = Webmidi::Message.polyphonic_pressure(60, 80, channel: 3)
+      midi2 = described_class.upgrade(midi1)
+
+      expect(midi2.status).to eq(:poly_pressure)
+      expect(midi2.note).to eq(60)
+      expect(midi2.channel).to eq(3)
+      expect(midi2.velocity).to eq(41_282)
+    end
+
+    it "converts ProgramChange" do
+      midi1 = Webmidi::Message.program_change(10, channel: 4)
+      midi2 = described_class.upgrade(midi1)
+
+      expect(midi2.status).to eq(:program_change)
+      expect(midi2.note).to eq(10)
+      expect(midi2.channel).to eq(4)
+    end
+
+    it "converts ChannelPressure" do
+      midi1 = Webmidi::Message.channel_pressure(80, channel: 6)
+      midi2 = described_class.upgrade(midi1)
+
+      expect(midi2.status).to eq(:channel_pressure)
+      expect(midi2.channel).to eq(6)
+      expect(midi2.velocity).to eq(2_705_491_209)
+    end
+
     it "preserves scaling endpoints" do
       expect(described_class.upgrade(Webmidi::Message.note_on(60, velocity: 0)).velocity).to eq(0)
       expect(described_class.upgrade(Webmidi::Message.note_on(60, velocity: 127)).velocity).to eq(0xFFFF)
+    end
+
+    it "exposes the MIDI 1.0 to UMP correspondence table" do
+      expect(described_class::MIDI1_CHANNEL_VOICE_TO_UMP)
+        .to include(Webmidi::Message::Channel::ProgramChange => include(status: :program_change))
     end
   end
 
@@ -112,6 +145,34 @@ RSpec.describe Webmidi::Message::UMP do
       expect(downgraded.note).to eq(72)
       expect(downgraded.velocity).to eq(80)
       expect(downgraded.channel).to eq(5)
+    end
+
+    it "round-trips ProgramChange through upgrade/downgrade" do
+      original = Webmidi::Message.program_change(32, channel: 7)
+      downgraded = described_class.downgrade(described_class.upgrade(original))
+
+      expect(downgraded).to be_a(Webmidi::Message::Channel::ProgramChange)
+      expect(downgraded.program).to eq(32)
+      expect(downgraded.channel).to eq(7)
+    end
+
+    it "round-trips ChannelPressure through upgrade/downgrade" do
+      original = Webmidi::Message.channel_pressure(80, channel: 3)
+      downgraded = described_class.downgrade(described_class.upgrade(original))
+
+      expect(downgraded).to be_a(Webmidi::Message::Channel::ChannelPressure)
+      expect(downgraded.pressure).to eq(80)
+      expect(downgraded.channel).to eq(3)
+    end
+
+    it "round-trips PolyphonicPressure through upgrade/downgrade" do
+      original = Webmidi::Message.polyphonic_pressure(60, 90, channel: 2)
+      downgraded = described_class.downgrade(described_class.upgrade(original))
+
+      expect(downgraded).to be_a(Webmidi::Message::Channel::PolyphonicPressure)
+      expect(downgraded.note).to eq(60)
+      expect(downgraded.pressure).to eq(90)
+      expect(downgraded.channel).to eq(2)
     end
   end
 
