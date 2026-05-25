@@ -84,12 +84,6 @@ module Webmidi
         callbacks.each { |cb| cb.call(self) }
         self
       end
-
-      private
-
-      def notify_state_change
-        @state_change_callbacks.each { |cb| cb.call(self) }
-      end
     end
   end
 end
