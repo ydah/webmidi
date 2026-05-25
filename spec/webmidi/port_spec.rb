@@ -19,26 +19,38 @@ RSpec.describe Webmidi::Port::Base do
   describe "#open / #close" do
     it "starts closed" do
       expect(port).not_to be_open
+      expect(port.state).to eq(:connected)
+      expect(port.connection).to eq(:closed)
     end
 
     it "can be opened" do
       port.open
       expect(port).to be_open
+      expect(port.connection).to eq(:open)
     end
 
     it "can be closed" do
       port.open
       port.close
       expect(port).not_to be_open
+      expect(port.state).to eq(:connected)
     end
   end
 
   describe "#on_state_change" do
     it "notifies on open" do
-      states = []
-      port.on_state_change { |p| states << p.state }
+      connections = []
+      port.on_state_change { |p| connections << p.connection }
       port.open
-      expect(states).to eq([:open])
+      expect(connections).to eq([:open])
+    end
+
+    it "can unsubscribe" do
+      connections = []
+      subscription = port.on_state_change { |p| connections << p.connection }
+      subscription.unsubscribe
+      port.open
+      expect(connections).to be_empty
     end
   end
 end
@@ -69,6 +81,51 @@ RSpec.describe Webmidi::Port::Output do
       port.send([0x90, 60, 100])
       expect(output_handle.sent_messages).to eq([[0x90, 60, 100]])
     end
+
+    it "validates raw bytes" do
+      expect { port.send([0x90, 60]) }.to raise_error(Webmidi::InvalidMessageError)
+    end
+
+    it "sends multiple raw messages without flattening message arguments" do
+      port.send([0x90, 60, 100, 0x80, 60, 0])
+      expect(output_handle.sent_messages).to eq([[0x90, 60, 100], [0x80, 60, 0]])
+    end
+
+    it "sends scheduled messages after their timestamp" do
+      timestamp = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 0.03
+      port.send(Webmidi::Message.note_on(60), timestamp: timestamp)
+      expect(output_handle.sent_messages).to be_empty
+      sleep 0.06
+      expect(output_handle.sent_messages).to eq([[0x90, 60, 100]])
+      port.close
+    end
+
+    it "clears scheduled messages" do
+      timestamp = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 0.04
+      port.send(Webmidi::Message.note_on(60), timestamp: timestamp)
+      port.clear
+      sleep 0.06
+      expect(output_handle.sent_messages).to be_empty
+      port.close
+    end
+
+    it "rejects SysEx unless enabled" do
+      expect { port.send(Webmidi::Message.sysex(0x7E)) }
+        .to raise_error(Webmidi::SysExNotPermittedError)
+    end
+
+    it "sends SysEx when enabled" do
+      sysex_port = described_class.new(
+        id: "out-sysex",
+        name: "Test Output",
+        manufacturer: "Test",
+        version: "1.0",
+        transport_handle: output_handle,
+        sysex_enabled: true
+      )
+      sysex_port.send(Webmidi::Message.sysex(0x7E))
+      expect(output_handle.sent_messages).to eq([[0xF0, 0x7E, 0xF7]])
+    end
   end
 
   describe "#note_on" do
@@ -89,6 +146,13 @@ RSpec.describe Webmidi::Port::Output do
     it "sends via pipe operator" do
       port << Webmidi::Message.note_on(60)
       expect(output_handle.sent_messages).not_to be_empty
+    end
+  end
+
+  describe "#send_all" do
+    it "sends arrays of messages as messages, not flattened bytes" do
+      port.send_all([Webmidi::Message.note_on(60), Webmidi::Message.note_off(60)])
+      expect(output_handle.sent_messages).to eq([[0x90, 60, 100], [0x80, 60, 0]])
     end
   end
 
@@ -133,6 +197,50 @@ RSpec.describe Webmidi::Port::Input do
       port.on_note_on { |msg| notes << msg.note }
       port.dispatch([0x90, 60, 100])
       expect(notes).to eq([60])
+    end
+
+    it "dispatches typed callbacks by superclass" do
+      received = []
+      port.on_type(Webmidi::Message::Channel::Base) { |msg| received << msg.class }
+      port.dispatch([0x90, 60, 100])
+      expect(received).to eq([Webmidi::Message::Channel::NoteOn])
+    end
+
+    it "can unsubscribe message callbacks" do
+      received = []
+      subscription = port.on_message { |msg| received << msg }
+      subscription.unsubscribe
+      port.dispatch([0x90, 60, 100])
+      expect(received).to be_empty
+    end
+
+    it "reports parse errors without raising by default" do
+      errors = []
+      port.on_error { |error, bytes| errors << [error.class, bytes] }
+      expect { port.dispatch([0x90, 60]) }.not_to raise_error
+      expect(errors).to eq([[Webmidi::InvalidMessageError, [0x90, 60]]])
+    end
+
+    it "masks SysEx when not enabled" do
+      received = []
+      port.on_message { |msg| received << msg }
+      port.dispatch([0xF0, 0x7E, 0xF7])
+      expect(received).to be_empty
+    end
+
+    it "dispatches SysEx when enabled" do
+      sysex_port = described_class.new(
+        id: "in-sysex",
+        name: "Test Input",
+        manufacturer: "Test",
+        version: "1.0",
+        transport_handle: input_handle,
+        sysex_enabled: true
+      )
+      received = []
+      sysex_port.on_sysex { |msg| received << msg }
+      sysex_port.dispatch([0xF0, 0x7E, 0xF7])
+      expect(received.first).to be_a(Webmidi::Message::System::SysEx)
     end
 
     it "does not dispatch when closed" do
@@ -184,5 +292,11 @@ RSpec.describe Webmidi::Port::Map do
     new_map = described_class.new
     new_map.add(port1)
     expect(new_map.size).to eq(1)
+  end
+
+  it "can create read-only snapshots" do
+    snapshot = map.snapshot
+    expect(snapshot.to_a).to eq([port1, port2])
+    expect { snapshot.add(port1) }.to raise_error(FrozenError)
   end
 end

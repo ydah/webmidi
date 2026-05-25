@@ -14,23 +14,23 @@ module Webmidi
       end
 
       def self.list_inputs
-        @mutex.synchronize { @ports.values.select { |p| p.is_a?(VirtualInputHandle) }.map(&:device_info) }
+        @mutex.synchronize { @ports.values.select { |p| p.is_a?(VirtualInputHandle) && !p.closed? }.map(&:device_info) }
       end
 
       def self.list_outputs
-        @mutex.synchronize { @ports.values.select { |p| p.is_a?(VirtualOutputHandle) }.map(&:device_info) }
+        @mutex.synchronize { @ports.values.select { |p| p.is_a?(VirtualOutputHandle) && !p.closed? }.map(&:device_info) }
       end
 
       def self.create_virtual_input(name)
         info = DeviceInfo.new(id: generate_id, name: name, manufacturer: "Webmidi Virtual", version: "1.0")
-        handle = VirtualInputHandle.new(info)
+        handle = VirtualInputHandle.new(info, on_close: -> { unregister(info.id) })
         @mutex.synchronize { @ports[info.id] = handle }
         handle
       end
 
       def self.create_virtual_output(name)
         info = DeviceInfo.new(id: generate_id, name: name, manufacturer: "Webmidi Virtual", version: "1.0")
-        handle = VirtualOutputHandle.new(info)
+        handle = VirtualOutputHandle.new(info, on_close: -> { unregister(info.id) })
         @mutex.synchronize { @ports[info.id] = handle }
         handle
       end
@@ -43,14 +43,17 @@ module Webmidi
       end
 
       def self.reset!
-        @mutex.synchronize do
-          @ports.each_value(&:close)
-          @ports.clear
-        end
+        handles = @mutex.synchronize { @ports.values.dup }
+        handles.each(&:close)
+        @mutex.synchronize { @ports.clear }
       end
 
       def self.generate_id
         "virtual-#{SecureRandom.uuid}"
+      end
+
+      def self.unregister(id)
+        @mutex.synchronize { @ports.delete(id) }
       end
       private_class_method :generate_id
 
@@ -59,8 +62,9 @@ module Webmidi
 
         attr_reader :device_info
 
-        def initialize(device_info)
+        def initialize(device_info, on_close: nil)
           @device_info = device_info
+          @on_close = on_close
           @queue = Thread::Queue.new
           @callbacks = []
           @mutex = Mutex.new
@@ -89,8 +93,11 @@ module Webmidi
         end
 
         def close
+          return if @closed
+
           @closed = true
           @queue.close
+          @on_close&.call
         end
 
         def closed?
@@ -103,8 +110,9 @@ module Webmidi
 
         attr_reader :device_info
 
-        def initialize(device_info)
+        def initialize(device_info, on_close: nil)
           @device_info = device_info
+          @on_close = on_close
           @connected_inputs = []
           @mutex = Mutex.new
           @closed = false
@@ -114,14 +122,17 @@ module Webmidi
         def write(bytes)
           raise PortClosedError, "Port is closed" if @closed
 
-          @mutex.synchronize do
+          connected_inputs = @mutex.synchronize do
             @sent_messages << bytes
-            @connected_inputs.each { |input| input.receive(bytes) }
+            @connected_inputs.dup
           end
+          connected_inputs.each { |input| input.receive(bytes) }
         end
 
         def connect(input_handle)
-          @mutex.synchronize { @connected_inputs << input_handle }
+          @mutex.synchronize do
+            @connected_inputs << input_handle unless @connected_inputs.include?(input_handle)
+          end
         end
 
         def disconnect(input_handle)
@@ -133,7 +144,10 @@ module Webmidi
         end
 
         def close
+          return if @closed
+
           @closed = true
+          @on_close&.call
         end
 
         def closed?

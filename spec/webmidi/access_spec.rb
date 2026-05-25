@@ -10,6 +10,10 @@ RSpec.describe Webmidi::Access do
       expect(access.inputs).to be_a(Webmidi::Port::Map)
       expect(access.outputs).to be_a(Webmidi::Port::Map)
     end
+
+    it "returns read-only snapshots" do
+      expect { access.inputs.add(access.create_input("Read Only")) }.to raise_error(FrozenError)
+    end
   end
 
   describe "#create_input" do
@@ -18,6 +22,13 @@ RSpec.describe Webmidi::Access do
       expect(port).to be_a(Webmidi::Port::Input)
       expect(access.input("My Input")).to eq(port)
     end
+
+    it "fires state change callbacks" do
+      ports = []
+      access.on_state_change { |port| ports << port.name }
+      access.create_input("My Input")
+      expect(ports).to eq(["My Input"])
+    end
   end
 
   describe "#create_output" do
@@ -25,6 +36,17 @@ RSpec.describe Webmidi::Access do
       port = access.create_output("My Output")
       expect(port).to be_a(Webmidi::Port::Output)
       expect(access.output("My Output")).to eq(port)
+    end
+  end
+
+  describe "#fetch_input! / #fetch_output!" do
+    it "fetches ports or raises" do
+      input = access.create_input("In")
+      output = access.create_output("Out")
+
+      expect(access.fetch_input!("In")).to eq(input)
+      expect(access.fetch_output!("Out")).to eq(output)
+      expect { access.fetch_input!("missing") }.to raise_error(Webmidi::PortNotFoundError)
     end
   end
 
@@ -59,6 +81,17 @@ RSpec.describe Webmidi::Access do
       expect(ports.size).to eq(2)
     end
   end
+
+  describe "#refresh_ports" do
+    it "removes closed virtual ports" do
+      port = access.create_input("In")
+      port.close
+
+      access.refresh_ports
+
+      expect(access.input("In")).to be_nil
+    end
+  end
 end
 
 RSpec.describe Webmidi do
@@ -68,6 +101,14 @@ RSpec.describe Webmidi do
     it "returns an Access instance" do
       access = described_class.request_access
       expect(access).to be_a(Webmidi::Access)
+    end
+
+    it "uses configured sysex by default" do
+      described_class.configure { |config| config.sysex = true }
+      access = described_class.request_access
+      expect(access.sysex_enabled?).to be true
+    ensure
+      described_class.reset_configuration!
     end
 
     it "yields to block and cleans up" do

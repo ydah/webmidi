@@ -22,6 +22,19 @@ RSpec.describe Webmidi::Transport::Virtual do
 
       expect(received).to eq([[0x90, 60, 100], [0x80, 60, 0]])
     end
+
+    it "does not duplicate connections" do
+      input = described_class.create_virtual_input("Input")
+      output = described_class.create_virtual_output("Output")
+      received = []
+      input.on_data { |bytes| received << bytes }
+
+      output.connect(input)
+      output.connect(input)
+      output.write([0x90, 60, 100])
+
+      expect(received).to eq([[0x90, 60, 100]])
+    end
   end
 
   describe "VirtualInputHandle" do
@@ -59,6 +72,16 @@ RSpec.describe Webmidi::Transport::Virtual do
       expect(described_class.list_inputs.size).to eq(1)
       expect(described_class.list_outputs.size).to eq(1)
       expect(described_class.list_inputs.first.name).to eq("Input 1")
+    end
+
+    it "removes closed ports from the registry" do
+      input = described_class.create_virtual_input("Input 1")
+      output = described_class.create_virtual_output("Output 1")
+      input.close
+      output.close
+
+      expect(described_class.list_inputs).to be_empty
+      expect(described_class.list_outputs).to be_empty
     end
   end
 end
