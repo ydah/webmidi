@@ -27,3 +27,7 @@ jobs:
           bundler-cache: true
       - name: Run the default task
         run: bundle exec rake
+      - name: Require smoke test
+        run: ruby -Ilib -e 'require "webmidi"'
+      - name: Release check
+        run: bundle exec rake release:check
