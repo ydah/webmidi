@@ -20,6 +20,10 @@ RSpec.describe Webmidi::Configuration do
       expect(config.default_velocity).to eq(100)
     end
 
+    it "has default group 0" do
+      expect(config.default_group).to eq(0)
+    end
+
     it "has sysex disabled" do
       expect(config.sysex).to be false
     end

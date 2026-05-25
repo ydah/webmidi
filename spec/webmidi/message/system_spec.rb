@@ -28,6 +28,12 @@ RSpec.describe Webmidi::Message::System::SysEx do
     end
     expect(matched).to be true
   end
+
+  it "splits and joins long data" do
+    chunks = msg.chunks(max_data_bytes: 2)
+    expect(chunks.map(&:data)).to eq([[0x7E, 0x7F], [0x09, 0x01]])
+    expect(described_class.join(chunks).data).to eq(msg.data)
+  end
 end
 
 RSpec.describe Webmidi::Message::System::TimeCode do

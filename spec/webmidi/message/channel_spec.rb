@@ -24,6 +24,20 @@ RSpec.describe Webmidi::Message::Channel::NoteOn do
     expect(msg).to eq(other)
   end
 
+  it "can copy with changed attributes while preserving timestamp" do
+    changed = msg.with(note: 62)
+    expect(changed.note).to eq(62)
+    expect(changed.velocity).to eq(100)
+    expect(changed.timestamp).to eq(msg.timestamp)
+  end
+
+  it "supports binary output and event comparison" do
+    other = described_class.new(note: 60, velocity: 100, channel: 0, timestamp: msg.timestamp)
+    expect(msg.to_binary).to eq([0x90, 60, 100].pack("C*").b)
+    expect(msg.same_bytes?(other)).to be true
+    expect(msg.same_event?(other)).to be true
+  end
+
   it "supports pattern matching" do
     case msg
     in { note: 60, velocity: (80..) }
@@ -72,6 +86,7 @@ RSpec.describe Webmidi::Message::Channel::NoteOff do
     parsed = Webmidi::Message.from_bytes(*msg.to_bytes)
     expect(parsed).to eq(msg)
   end
+
 end
 
 RSpec.describe Webmidi::Message::Channel::PolyphonicPressure do
@@ -85,6 +100,7 @@ RSpec.describe Webmidi::Message::Channel::PolyphonicPressure do
     parsed = Webmidi::Message.from_bytes(*msg.to_bytes)
     expect(parsed).to eq(msg)
   end
+
 end
 
 RSpec.describe Webmidi::Message::Channel::ControlChange do
@@ -97,6 +113,11 @@ RSpec.describe Webmidi::Message::Channel::ControlChange do
   it "round-trips through bytes" do
     parsed = Webmidi::Message.from_bytes(*msg.to_bytes)
     expect(parsed).to eq(msg)
+  end
+
+  it "accepts named controllers" do
+    named = described_class.new(cc: :all_notes_off, value: 0)
+    expect(named.cc).to eq(described_class::ALL_NOTES_OFF)
   end
 end
 
@@ -146,6 +167,12 @@ RSpec.describe Webmidi::Message::Channel::PitchBend do
   it "validates range" do
     expect { described_class.new(value: 16384, channel: 0) }
       .to raise_error(Webmidi::InvalidMessageError)
+  end
+
+  it "supports signed values" do
+    msg = described_class.from_signed(-8192)
+    expect(msg.value).to eq(0)
+    expect(msg.signed_value).to eq(-8192)
   end
 
   context "with minimum value" do

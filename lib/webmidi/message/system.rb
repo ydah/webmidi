@@ -10,6 +10,10 @@ module Webmidi
         attr_reader :data
 
         def initialize(data:, timestamp: nil)
+          unless data.respond_to?(:each)
+            raise InvalidMessageError, "SysEx data must be enumerable, got #{data.class}"
+          end
+
           data.each_with_index do |byte, i|
             unless byte.is_a?(Integer) && byte.between?(0, 127)
               raise InvalidMessageError, "SysEx data byte at index #{i} must be between 0 and 127, got #{byte.inspect}"
@@ -25,6 +29,26 @@ module Webmidi
 
         def deconstruct_keys(keys)
           { data: @data }
+        end
+
+        def chunks(max_data_bytes:)
+          self.class.split(self, max_data_bytes: max_data_bytes)
+        end
+
+        def self.split(data, max_data_bytes:)
+          unless max_data_bytes.is_a?(Integer) && max_data_bytes.positive?
+            raise InvalidMessageError, "max_data_bytes must be a positive integer, got #{max_data_bytes.inspect}"
+          end
+
+          bytes = data.is_a?(self) ? data.data : data
+          bytes.each_slice(max_data_bytes).map { |slice| new(data: slice) }
+        end
+
+        def self.join(messages)
+          data = messages.flat_map do |message|
+            message.is_a?(self) ? message.data : message
+          end
+          new(data: data)
         end
       end
 

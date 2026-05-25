@@ -88,10 +88,45 @@ module Webmidi
       end
 
       class ControlChange < Base
+        CONTROLLERS = {
+          bank_select: 0,
+          modulation: 1,
+          breath_controller: 2,
+          foot_controller: 4,
+          portamento_time: 5,
+          data_entry_msb: 6,
+          volume: 7,
+          balance: 8,
+          pan: 10,
+          expression: 11,
+          sustain: 64,
+          portamento: 65,
+          sostenuto: 66,
+          soft_pedal: 67,
+          legato: 68,
+          hold_2: 69,
+          sound_variation: 70,
+          resonance: 71,
+          release_time: 72,
+          attack_time: 73,
+          brightness: 74,
+          all_sound_off: 120,
+          reset_all_controllers: 121,
+          local_control: 122,
+          all_notes_off: 123,
+          omni_off: 124,
+          omni_on: 125,
+          mono_on: 126,
+          poly_on: 127
+        }.freeze
+
+        ALL_NOTES_OFF = CONTROLLERS[:all_notes_off]
+
         attr_reader :cc, :value
 
         def initialize(cc:, value:, channel: 0, timestamp: nil)
           validate_channel!(channel)
+          cc = self.class.controller_number(cc)
           validate_byte!(cc, "CC")
           validate_byte!(value, "Value")
           @cc = cc
@@ -106,6 +141,15 @@ module Webmidi
 
         def deconstruct_keys(keys)
           { cc: @cc, value: @value, channel: @channel }
+        end
+
+        def self.controller_number(controller)
+          return controller if controller.is_a?(Integer)
+
+          key = controller.to_sym if controller.respond_to?(:to_sym)
+          return CONTROLLERS[key] if key && CONTROLLERS.key?(key)
+
+          raise InvalidMessageError, "Unknown control change controller: #{controller.inspect}"
         end
       end
 
@@ -150,12 +194,18 @@ module Webmidi
       end
 
       class PitchBend < Base
+        MIN = 0
+        CENTER = 8192
+        MAX = 16_383
+        SIGNED_MIN = -8192
+        SIGNED_MAX = 8191
+
         attr_reader :value
 
         def initialize(value:, channel: 0, timestamp: nil)
           validate_channel!(channel)
-          unless value.is_a?(Integer) && value.between?(0, 16383)
-            raise InvalidMessageError, "Pitch bend value must be between 0 and 16383, got #{value.inspect}"
+          unless value.is_a?(Integer) && value.between?(MIN, MAX)
+            raise InvalidMessageError, "Pitch bend value must be between #{MIN} and #{MAX}, got #{value.inspect}"
           end
           @value = value
           @channel = channel
@@ -168,6 +218,19 @@ module Webmidi
 
         def deconstruct_keys(keys)
           { value: @value, channel: @channel }
+        end
+
+        def signed_value
+          @value - CENTER
+        end
+
+        def self.from_signed(value, channel: 0, timestamp: nil)
+          unless value.is_a?(Integer) && value.between?(SIGNED_MIN, SIGNED_MAX)
+            raise InvalidMessageError,
+                  "Signed pitch bend value must be between #{SIGNED_MIN} and #{SIGNED_MAX}, got #{value.inspect}"
+          end
+
+          new(value: value + CENTER, channel: channel, timestamp: timestamp)
         end
       end
     end

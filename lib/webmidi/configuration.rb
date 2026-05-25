@@ -4,6 +4,7 @@ module Webmidi
   class Configuration
     attr_accessor :transport, :fallback_transport,
                   :default_channel, :default_velocity,
+                  :default_group,
                   :sysex,
                   :logger, :log_level,
                   :timestamp_source
@@ -17,6 +18,7 @@ module Webmidi
       @fallback_transport = :virtual
       @default_channel = 0
       @default_velocity = 100
+      @default_group = 0
       @sysex = false
       @logger = nil
       @log_level = :info
