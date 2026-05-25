@@ -7,12 +7,34 @@ require_relative "transport/null"
 
 module Webmidi
   module Transport
+    @registered_transports = []
+    @registry_mutex = Mutex.new
+
     module_function
 
-    def auto_detect(transport: Webmidi.configuration.transport, fallback_transport: Webmidi.configuration.fallback_transport)
+    def register(transport)
+      validate_transport_adapter!(transport)
+      @registry_mutex.synchronize do
+        @registered_transports << transport unless @registered_transports.include?(transport)
+      end
+      transport
+    end
+
+    def unregister(transport)
+      @registry_mutex.synchronize { @registered_transports.delete(transport) }
+      transport
+    end
+
+    def registered
+      @registry_mutex.synchronize { @registered_transports.dup.freeze }
+    end
+
+    def auto_detect(transport: Webmidi.configuration.transport,
+      fallback_transport: Webmidi.configuration.fallback_transport,
+      candidates: default_candidates)
       return resolve_transport!(transport) unless transport == :auto
 
-      detected = [Virtual].find(&:available?)
+      detected = candidates.find { |candidate| candidate.respond_to?(:available?) && candidate.available? }
       detected || resolve_transport!(fallback_transport)
     end
 
@@ -39,6 +61,17 @@ module Webmidi
       raise TransportNotAvailableError, "Transport is not available: #{transport}"
     end
 
-    private_class_method :resolve_transport!, :available_transport!
+    def default_candidates
+      registered + [Virtual]
+    end
+
+    def validate_transport_adapter!(transport)
+      return if transport.respond_to?(:available?)
+
+      raise TransportNotAvailableError, "Transport adapter must respond to available?: #{transport.inspect}"
+    end
+
+    private_class_method :resolve_transport!, :available_transport!, :default_candidates,
+      :validate_transport_adapter!
   end
 end
