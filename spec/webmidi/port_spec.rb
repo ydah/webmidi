@@ -35,6 +35,19 @@ RSpec.describe Webmidi::Port::Base do
       expect(port).not_to be_open
       expect(port.state).to eq(:connected)
     end
+
+    it "can be reopened after closing the connection" do
+      port.open
+      port.close
+      port.open
+      expect(port).to be_open
+      expect(handle).not_to be_closed
+    end
+
+    it "cannot be opened after disconnecting the device" do
+      port.disconnect
+      expect { port.open }.to raise_error(Webmidi::PortClosedError, /disconnected/)
+    end
   end
 
   describe "#on_state_change" do
@@ -89,6 +102,13 @@ RSpec.describe Webmidi::Port::Output do
     it "sends multiple raw messages without flattening message arguments" do
       port.send([0x90, 60, 100, 0x80, 60, 0])
       expect(output_handle.sent_messages).to eq([[0x90, 60, 100], [0x80, 60, 0]])
+    end
+
+    it "can send again after close reopens the connection" do
+      port.send(Webmidi::Message.note_on(60))
+      port.close
+      port.send(Webmidi::Message.note_on(61))
+      expect(output_handle.sent_messages).to eq([[0x90, 60, 100], [0x90, 61, 100]])
     end
 
     it "sends scheduled messages after their timestamp" do

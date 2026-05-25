@@ -55,7 +55,7 @@ module Webmidi
     end
 
     def close
-      each(&:close)
+      each(&:disconnect)
       self
     end
 

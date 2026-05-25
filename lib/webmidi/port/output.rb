@@ -103,6 +103,11 @@ module Webmidi
         super
       end
 
+      def disconnect
+        shutdown_scheduler
+        super
+      end
+
       private
 
       def apply_middleware(message)

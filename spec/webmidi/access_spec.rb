@@ -70,6 +70,8 @@ RSpec.describe Webmidi::Access do
       access.close
       expect(input).not_to be_open
       expect(output).not_to be_open
+      expect(input.state).to eq(:disconnected)
+      expect(output.state).to eq(:disconnected)
     end
   end
 
@@ -85,7 +87,7 @@ RSpec.describe Webmidi::Access do
   describe "#refresh_ports" do
     it "removes closed virtual ports" do
       port = access.create_input("In")
-      port.close
+      port.disconnect
 
       access.refresh_ports
 

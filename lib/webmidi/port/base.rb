@@ -35,6 +35,7 @@ module Webmidi
 
       def open
         callbacks = @mutex.synchronize do
+          raise PortClosedError, "Port is disconnected" if @state == :disconnected
           return self if @connection == :open
 
           @connection = :open
@@ -48,7 +49,6 @@ module Webmidi
         callbacks = @mutex.synchronize do
           was_open = @connection == :open
           @connection = :closed
-          @transport_handle&.close
           was_open ? @state_change_callbacks.dup : []
         end
         callbacks.each { |cb| cb.call(self) }

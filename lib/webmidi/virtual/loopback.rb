@@ -37,8 +37,8 @@ module Webmidi
       end
 
       def close
-        @input&.close
-        @output&.close
+        @input&.disconnect
+        @output&.disconnect
       end
     end
   end
