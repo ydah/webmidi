@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "network/rtp"
+require_relative "network/apple_midi"
 require_relative "network/osc"
 
 module Webmidi

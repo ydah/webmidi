@@ -3,6 +3,16 @@
 RSpec.describe Webmidi::Transport do
   after { Webmidi.reset_configuration! }
 
+  def adapter_class(available: true)
+    Class.new do
+      define_singleton_method(:available?) { available }
+      define_singleton_method(:list_inputs) { [] }
+      define_singleton_method(:list_outputs) { [] }
+      define_singleton_method(:open_input) { |_device_info| nil }
+      define_singleton_method(:open_output) { |_device_info| nil }
+    end
+  end
+
   describe ".auto_detect" do
     it "honors explicit virtual transport configuration" do
       Webmidi.configure { |config| config.transport = :virtual }
@@ -20,11 +30,7 @@ RSpec.describe Webmidi::Transport do
     end
 
     it "detects registered adapter transports before virtual fallback" do
-      adapter = Class.new do
-        def self.available?
-          true
-        end
-      end
+      adapter = adapter_class
 
       described_class.register(adapter)
       expect(described_class.auto_detect).to eq(adapter)
@@ -33,11 +39,7 @@ RSpec.describe Webmidi::Transport do
     end
 
     it "uses configured fallback when no auto-detect candidates are available" do
-      unavailable = Class.new do
-        def self.available?
-          false
-        end
-      end
+      unavailable = adapter_class(available: false)
 
       expect(described_class.auto_detect(candidates: [unavailable], fallback_transport: :null))
         .to eq(Webmidi::Transport::Null)
@@ -46,11 +48,7 @@ RSpec.describe Webmidi::Transport do
 
   describe ".register / .unregister" do
     it "keeps a defensive snapshot of registered adapter transports" do
-      adapter = Class.new do
-        def self.available?
-          true
-        end
-      end
+      adapter = adapter_class
 
       2.times { described_class.register(adapter) }
       registered = described_class.registered
@@ -63,7 +61,22 @@ RSpec.describe Webmidi::Transport do
 
     it "rejects invalid adapter objects" do
       expect { described_class.register(Object.new) }
-        .to raise_error(Webmidi::TransportNotAvailableError, /available/)
+        .to raise_error(Webmidi::TransportNotAvailableError, /missing/)
+    end
+  end
+
+  describe ".load_adapter" do
+    it "loads and registers an adapter constant using adapter gem naming conventions" do
+      adapter = adapter_class
+      stub_const("Webmidi::Transport::CoreMidi", adapter)
+
+      loaded = described_class.load_adapter(:core_midi, require_path: nil)
+
+      expect(loaded).to eq(adapter)
+      expect(Webmidi::Transport::Adapter.gem_name(:core_midi)).to eq("webmidi-core-midi")
+      expect(Webmidi::Transport::Adapter.require_path(:core_midi)).to eq("webmidi/transport/core_midi")
+    ensure
+      described_class.unregister(adapter) if adapter
     end
   end
 end

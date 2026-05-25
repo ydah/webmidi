@@ -2,6 +2,7 @@
 
 require_relative "transport/device_info"
 require_relative "transport/base"
+require_relative "transport/adapter"
 require_relative "transport/virtual"
 require_relative "transport/null"
 
@@ -13,7 +14,7 @@ module Webmidi
     module_function
 
     def register(transport)
-      validate_transport_adapter!(transport)
+      Adapter.validate!(transport)
       @registry_mutex.synchronize do
         @registered_transports << transport unless @registered_transports.include?(transport)
       end
@@ -27,6 +28,15 @@ module Webmidi
 
     def registered
       @registry_mutex.synchronize { @registered_transports.dup.freeze }
+    end
+
+    def load_adapter(name, require_path: Adapter.require_path(name), constant: Adapter.constant_name(name))
+      require require_path if require_path
+      register(Adapter.constantize(constant))
+    rescue LoadError => e
+      raise TransportNotAvailableError, "Could not load #{Adapter.gem_name(name)}: #{e.message}"
+    rescue NameError => e
+      raise TransportNotAvailableError, "Could not find transport adapter #{constant}: #{e.message}"
     end
 
     def auto_detect(transport: Webmidi.configuration.transport,
@@ -65,13 +75,6 @@ module Webmidi
       registered + [Virtual]
     end
 
-    def validate_transport_adapter!(transport)
-      return if transport.respond_to?(:available?)
-
-      raise TransportNotAvailableError, "Transport adapter must respond to available?: #{transport.inspect}"
-    end
-
-    private_class_method :resolve_transport!, :available_transport!, :default_candidates,
-      :validate_transport_adapter!
+    private_class_method :resolve_transport!, :available_transport!, :default_candidates
   end
 end

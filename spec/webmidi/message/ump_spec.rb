@@ -229,6 +229,37 @@ RSpec.describe Webmidi::Message::UMP do
       expect(msg).to be_a(Webmidi::Message::UMP::Data64)
     end
 
+    it "exposes parsed system common fields" do
+      msg = described_class.from_words(0x10F20102)
+
+      expect(msg).to be_a(Webmidi::Message::UMP::SystemCommon)
+      expect(msg.status).to eq(:song_position)
+      expect(msg.status_byte).to eq(0xF2)
+      expect(msg.data1).to eq(1)
+      expect(msg.data2).to eq(2)
+    end
+
+    it "exposes parsed data packet fields" do
+      msg = described_class.from_words(0x30040102, 0x03040506)
+
+      expect(msg).to be_a(Webmidi::Message::UMP::Data64)
+      expect(msg.packet_format).to eq(:complete)
+      expect(msg.byte_count).to eq(4)
+      expect(msg.data_bytes).to eq([1, 2, 3, 4])
+    end
+
+    it "exposes parsed flex data fields" do
+      msg = described_class.from_words(0xD1153401, 0x11111111, 0x22222222, 0x33333333)
+
+      expect(msg).to be_a(Webmidi::Message::UMP::FlexData)
+      expect(msg.format).to eq(0)
+      expect(msg.address).to eq(1)
+      expect(msg.channel).to eq(5)
+      expect(msg.status_bank).to eq(0x34)
+      expect(msg.status).to eq(0x01)
+      expect(msg.data_words).to eq([0x11111111, 0x22222222, 0x33333333])
+    end
+
     it "can copy raw message type subclasses" do
       msg = Webmidi::Message::UMP::Data64.new(words: [0x30000000, 0x00000000])
       copy = msg.with(timestamp: 12.0)

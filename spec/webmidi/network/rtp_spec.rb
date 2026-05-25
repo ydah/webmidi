@@ -56,6 +56,41 @@ RSpec.describe Webmidi::Network::RTP::Packet do
   end
 end
 
+RSpec.describe Webmidi::Network::RTP::ControlPacket do
+  it "round-trips AppleMIDI invitations" do
+    packet = described_class.invitation(token: 123, ssrc: 456, name: "Client")
+    parsed = described_class.parse(packet.to_bytes)
+
+    expect(parsed.command).to eq(:invitation)
+    expect(parsed.version).to eq(described_class::PROTOCOL_VERSION)
+    expect(parsed.token).to eq(123)
+    expect(parsed.ssrc).to eq(456)
+    expect(parsed.name).to eq("Client")
+  end
+
+  it "round-trips synchronization packets" do
+    packet = described_class.synchronization(ssrc: 456, count: 1, timestamps: [10, 20, 30])
+    parsed = described_class.parse(packet.to_bytes)
+
+    expect(parsed.command).to eq(:synchronization)
+    expect(parsed.count).to eq(1)
+    expect(parsed.timestamps).to eq([10, 20, 30])
+  end
+
+  it "round-trips receiver feedback and end-session packets" do
+    feedback = described_class.parse(described_class.receiver_feedback(ssrc: 456, sequence_number: 42).to_bytes)
+    bye = described_class.parse(described_class.end_session(ssrc: 456).to_bytes)
+
+    expect(feedback.sequence_number).to eq(42)
+    expect(bye.command).to eq(:end_session)
+  end
+
+  it "validates fixed-width fields before packing" do
+    expect { described_class.invitation(token: -1, ssrc: 456, name: "Client") }
+      .to raise_error(Webmidi::InvalidMessageError, /Initiator token/)
+  end
+end
+
 RSpec.describe Webmidi::Network::RTP::Session do
   let(:session) { Webmidi::Network::RTP.server(port: 0, name: "Test") }
 
@@ -123,5 +158,40 @@ RSpec.describe Webmidi::Network::RTP::Session do
     sleep 0.1
 
     expect(errors.first).to be_a(Webmidi::InvalidMessageError)
+  end
+end
+
+RSpec.describe Webmidi::Network::AppleMIDI::Session do
+  def wait_until(timeout: 1.0)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+    until yield
+      raise "timed out waiting for condition" if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+      sleep 0.01
+    end
+  end
+
+  let(:server) { Webmidi::Network::AppleMIDI.server(port: 0, name: "Server") }
+  let(:client) { Webmidi::Network::AppleMIDI.server(port: 0, name: "Client") }
+
+  after do
+    client.close
+    server.close
+  end
+
+  it "negotiates control and data invitations before sending RTP MIDI" do
+    received = []
+    server.start
+    client.start
+    server.on_message { |message| received << message }
+
+    client.connect_to("127.0.0.1", server.control_port, data_port: server.data_port)
+
+    wait_until { client.peers.any? && server.peers.any? }
+    client.send(Webmidi::Message.note_on(60, velocity: 100))
+    wait_until { received.any? }
+
+    expect(received.first).to be_a(Webmidi::Message::Channel::NoteOn)
+    expect(received.first.note).to eq(60)
   end
 end

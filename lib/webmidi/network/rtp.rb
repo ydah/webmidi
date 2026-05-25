@@ -10,6 +10,134 @@ module Webmidi
       PROTOCOL_VERSION = 2
       MIDI_PAYLOAD_TYPE = 97
 
+      class ControlPacket
+        SIGNATURE = 0xFFFF
+        PROTOCOL_VERSION = 2
+        COMMANDS = {
+          invitation: "IN",
+          accepted: "OK",
+          rejected: "NO",
+          synchronization: "CK",
+          receiver_feedback: "RS",
+          end_session: "BY"
+        }.freeze
+        COMMAND_BY_CODE = COMMANDS.invert.freeze
+
+        attr_reader :command, :version, :token, :ssrc, :name, :count, :timestamps, :sequence_number
+
+        def initialize(command:, version: PROTOCOL_VERSION, token: 0, ssrc: 0, name: "", count: 0,
+          timestamps: [], sequence_number: 0)
+          raise InvalidMessageError, "Unknown AppleMIDI command: #{command.inspect}" unless COMMANDS.key?(command)
+          self.class.validate_range!(version, "Protocol version", 0, 0xFFFF_FFFF)
+          self.class.validate_range!(token, "Initiator token", 0, 0xFFFF_FFFF)
+          self.class.validate_range!(ssrc, "SSRC", 0, 0xFFFF_FFFF)
+          self.class.validate_range!(count, "Synchronization count", 0, 3)
+          self.class.validate_range!(sequence_number, "Sequence number", 0, 0xFFFF)
+
+          @command = command
+          @version = version
+          @token = token
+          @ssrc = ssrc
+          @name = name.to_s
+          @count = count
+          @timestamps = timestamps.dup.freeze
+          @sequence_number = sequence_number
+        end
+
+        def self.invitation(token:, ssrc:, name:, version: PROTOCOL_VERSION)
+          new(command: :invitation, version: version, token: token, ssrc: ssrc, name: name)
+        end
+
+        def self.accepted(token:, ssrc:, name:, version: PROTOCOL_VERSION)
+          new(command: :accepted, version: version, token: token, ssrc: ssrc, name: name)
+        end
+
+        def self.rejected(token:, ssrc:, name:, version: PROTOCOL_VERSION)
+          new(command: :rejected, version: version, token: token, ssrc: ssrc, name: name)
+        end
+
+        def self.synchronization(ssrc:, count:, timestamps:)
+          new(command: :synchronization, ssrc: ssrc, count: count, timestamps: timestamps)
+        end
+
+        def self.receiver_feedback(ssrc:, sequence_number:)
+          new(command: :receiver_feedback, ssrc: ssrc, sequence_number: sequence_number)
+        end
+
+        def self.end_session(ssrc:)
+          new(command: :end_session, ssrc: ssrc)
+        end
+
+        def to_bytes
+          header = [SIGNATURE].pack("n") + COMMANDS.fetch(@command)
+          header + payload_bytes
+        end
+
+        def self.parse(bytes)
+          return nil if bytes.bytesize < 4
+
+          signature = bytes[0, 2].unpack1("n")
+          command = COMMAND_BY_CODE[bytes[2, 2]]
+          return nil unless signature == SIGNATURE && command
+
+          parse_payload(command, bytes[4..] || "")
+        end
+
+        def self.parse_payload(command, payload)
+          case command
+          when :invitation, :accepted, :rejected
+            return nil if payload.bytesize < 12
+
+            version, token, ssrc = payload[0, 12].unpack("NNN")
+            name = (payload[12..] || "").split("\0", 2).first
+            new(command: command, version: version, token: token, ssrc: ssrc, name: name)
+          when :synchronization
+            return nil if payload.bytesize < 28
+
+            ssrc = payload[0, 4].unpack1("N")
+            count = payload.getbyte(4)
+            timestamps = payload[8, 24].unpack("Q>Q>Q>")
+            new(command: command, ssrc: ssrc, count: count, timestamps: timestamps)
+          when :receiver_feedback
+            return nil if payload.bytesize < 6
+
+            ssrc, sequence_number = payload[0, 6].unpack("Nn")
+            new(command: command, ssrc: ssrc, sequence_number: sequence_number)
+          when :end_session
+            return nil if payload.bytesize < 4
+
+            new(command: command, ssrc: payload[0, 4].unpack1("N"))
+          end
+        end
+
+        def self.timestamp
+          (Process.clock_gettime(Process::CLOCK_MONOTONIC) * 1_000_000).to_i
+        end
+
+        def self.validate_range!(value, name, min, max)
+          return if value.is_a?(Integer) && value.between?(min, max)
+
+          raise InvalidMessageError, "#{name} must be between #{min} and #{max}, got #{value.inspect}"
+        end
+
+        private
+
+        def payload_bytes
+          case @command
+          when :invitation, :accepted, :rejected
+            [@version, @token, @ssrc].pack("NNN") + "#{@name}\0".b
+          when :synchronization
+            padded = @timestamps.first(3)
+            padded << 0 while padded.size < 3
+            [@ssrc, @count].pack("NC") + "\0\0\0" + padded.pack("Q>Q>Q>")
+          when :receiver_feedback
+            [@ssrc, @sequence_number].pack("Nn")
+          when :end_session
+            [@ssrc].pack("N")
+          end
+        end
+      end
+
       module_function
 
       def server(port: 5004, name: "Webmidi")
@@ -93,16 +221,17 @@ module Webmidi
       end
 
       class Session
-        attr_reader :name
+        attr_reader :name, :ssrc
 
-        def initialize(port:, name:, mode: :server)
+        def initialize(port:, name:, mode: :server, ssrc: SecureRandom.random_number(0xFFFFFFFF))
           @port = port
           @name = name
           @mode = mode
-          @ssrc = SecureRandom.random_number(0xFFFFFFFF)
+          @ssrc = ssrc
           @sequence_number = 0
           @peers = []
           @callbacks = []
+          @control_callbacks = []
           @error_callbacks = []
           @mutex = Mutex.new
           @running = false
@@ -184,6 +313,21 @@ module Webmidi
           end
         end
 
+        def on_control_packet(&block)
+          raise ArgumentError, "on_control_packet requires a block" unless block
+
+          @mutex.synchronize { @control_callbacks << block }
+          CallbackSubscription.new do
+            @mutex.synchronize { @control_callbacks.delete(block) }
+          end
+        end
+
+        def send_control_packet(packet, host, port)
+          start unless @running
+          @socket&.send(packet.to_bytes, 0, host, port)
+          self
+        end
+
         def close
           stop
         end
@@ -214,7 +358,13 @@ module Webmidi
         def receive_loop
           while @running
             begin
-              data, = @socket.recvfrom_nonblock(1024)
+              data, address = @socket.recvfrom_nonblock(1024)
+              control_packet = ControlPacket.parse(data)
+              if control_packet
+                notify_control_packet(control_packet, address)
+                next
+              end
+
               packet = Packet.parse(data)
               next unless packet
 
@@ -242,6 +392,12 @@ module Webmidi
           return if port.is_a?(Integer) && port.between?(1, 65_535)
 
           raise NetworkError, "Peer port must be between 1 and 65535, got #{port.inspect}"
+        end
+
+        def notify_control_packet(packet, address)
+          peer = {host: address[3], port: address[1]}
+          callbacks = @mutex.synchronize { @control_callbacks.dup }
+          callbacks.each { |cb| cb.call(packet, peer) }
         end
 
         def notify_error(error, data = nil)

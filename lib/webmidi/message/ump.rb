@@ -35,6 +35,27 @@ module Webmidi
 
       STATUS_BY_NIBBLE = STATUS_NIBBLES.invert.freeze
 
+      SYSTEM_COMMON_STATUSES = {
+        0xF1 => :time_code,
+        0xF2 => :song_position,
+        0xF3 => :song_select,
+        0xF6 => :tune_request,
+        0xF8 => :clock,
+        0xFA => :start,
+        0xFB => :continue,
+        0xFC => :stop,
+        0xFE => :active_sensing,
+        0xFF => :system_reset
+      }.freeze
+
+      DATA_PACKET_FORMATS = {
+        complete: 0x0,
+        start: 0x1,
+        continue: 0x2,
+        end: 0x3
+      }.freeze
+      DATA_PACKET_FORMAT_BY_NIBBLE = DATA_PACKET_FORMATS.invert.freeze
+
       CHANNEL_VOICE_32_STATUSES = %i[
         note_off note_on poly_pressure control_change program_change channel_pressure pitch_bend
       ].freeze
@@ -138,6 +159,12 @@ module Webmidi
 
         private
 
+        def constructor_attributes
+          attributes = {message_type: @message_type, group: @group, words: @words}
+          attributes.delete(:message_type) unless instance_of?(Raw)
+          attributes
+        end
+
         def words_with_group(words, group)
           next_words = words.dup
           next_words[0] = (next_words[0] & 0xF0FF_FFFF) | (group << 24)
@@ -189,11 +216,43 @@ module Webmidi
         def initialize(words:, group: 0, timestamp: nil)
           super(message_type: :utility, words: words, group: group, timestamp: timestamp)
         end
+
+        def status
+          (@words.first >> 16) & 0xFF
+        end
+
+        def payload
+          @words.first & 0xFFFF
+        end
+
+        def deconstruct_keys(keys)
+          super.merge(status: status, payload: payload)
+        end
       end
 
       class SystemCommon < Raw
         def initialize(words:, group: 0, timestamp: nil)
           super(message_type: :system_common, words: words, group: group, timestamp: timestamp)
+        end
+
+        def status_byte
+          (@words.first >> 16) & 0xFF
+        end
+
+        def status
+          SYSTEM_COMMON_STATUSES.fetch(status_byte, :unknown)
+        end
+
+        def data1
+          (@words.first >> 8) & 0x7F
+        end
+
+        def data2
+          @words.first & 0x7F
+        end
+
+        def deconstruct_keys(keys)
+          super.merge(status_byte: status_byte, status: status, data1: data1, data2: data2)
         end
       end
 
@@ -201,17 +260,108 @@ module Webmidi
         def initialize(words:, group: 0, timestamp: nil)
           super(message_type: :data_64, words: words, group: group, timestamp: timestamp)
         end
+
+        def packet_format
+          DATA_PACKET_FORMAT_BY_NIBBLE.fetch((@words.first >> 20) & 0x0F, :unknown)
+        end
+
+        def byte_count
+          (@words.first >> 16) & 0x0F
+        end
+
+        def data_bytes
+          [
+            (@words.first >> 8) & 0xFF,
+            @words.first & 0xFF,
+            (@words[1] >> 24) & 0xFF,
+            (@words[1] >> 16) & 0xFF,
+            (@words[1] >> 8) & 0xFF,
+            @words[1] & 0xFF
+          ].first(byte_count)
+        end
+
+        def deconstruct_keys(keys)
+          super.merge(packet_format: packet_format, byte_count: byte_count, data_bytes: data_bytes)
+        end
       end
 
       class Data128 < Raw
         def initialize(words:, group: 0, timestamp: nil)
           super(message_type: :data_128, words: words, group: group, timestamp: timestamp)
         end
+
+        def packet_format
+          DATA_PACKET_FORMAT_BY_NIBBLE.fetch((@words.first >> 20) & 0x0F, :unknown)
+        end
+
+        def byte_count
+          (@words.first >> 16) & 0x0F
+        end
+
+        def stream_id
+          (@words.first >> 8) & 0xFF
+        end
+
+        def data_bytes
+          word_bytes(@words.first & 0xFF, *@words[1..]).first(byte_count)
+        end
+
+        def deconstruct_keys(keys)
+          super.merge(
+            packet_format: packet_format,
+            byte_count: byte_count,
+            stream_id: stream_id,
+            data_bytes: data_bytes
+          )
+        end
+
+        private
+
+        def word_bytes(first_byte, *words)
+          [first_byte] + words.flat_map do |word|
+            [(word >> 24) & 0xFF, (word >> 16) & 0xFF, (word >> 8) & 0xFF, word & 0xFF]
+          end
+        end
       end
 
       class FlexData < Raw
         def initialize(words:, group: 0, timestamp: nil)
           super(message_type: :flex_data, words: words, group: group, timestamp: timestamp)
+        end
+
+        def format
+          (@words.first >> 22) & 0x03
+        end
+
+        def address
+          (@words.first >> 20) & 0x03
+        end
+
+        def channel
+          (@words.first >> 16) & 0x0F
+        end
+
+        def status_bank
+          (@words.first >> 8) & 0xFF
+        end
+
+        def status
+          @words.first & 0xFF
+        end
+
+        def data_words
+          @words[1..]
+        end
+
+        def deconstruct_keys(keys)
+          super.merge(
+            format: format,
+            address: address,
+            channel: channel,
+            status_bank: status_bank,
+            status: status,
+            data_words: data_words
+          )
         end
       end
 

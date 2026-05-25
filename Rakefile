@@ -6,6 +6,20 @@ require "tmpdir"
 
 RSpec::Core::RakeTask.new(:spec)
 
+task :coverage do
+  ENV["COVERAGE"] = "1"
+  Rake::Task[:spec].invoke
+end
+
+task :mutation do
+  unless Gem::Specification.find_all_by_name("mutant-rspec").any?
+    warn "mutant-rspec is not installed; skipping mutation run"
+    next
+  end
+
+  sh "bundle exec mutant run --use rspec Webmidi*"
+end
+
 task :standard do
   ENV["RUBOCOP_CACHE_ROOT"] ||= File.expand_path("tmp/rubocop_cache", __dir__)
   sh "standardrb"
