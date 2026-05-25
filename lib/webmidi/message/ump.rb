@@ -80,7 +80,19 @@ module Webmidi
           {message_type: @message_type, group: @group}
         end
 
+        def with(**changes)
+          changes = changes.dup
+          next_timestamp = changes.key?(:timestamp) ? changes.delete(:timestamp) : @timestamp
+          self.class.new(**constructor_attributes.merge(changes), timestamp: next_timestamp)
+        end
+
         private
+
+        def constructor_attributes
+          attributes = deconstruct_keys(nil)
+          attributes.delete(:message_type) unless instance_of?(Base) || instance_of?(Raw)
+          attributes
+        end
 
         def validate_message_type!(message_type)
           return if MESSAGE_TYPES.key?(message_type)

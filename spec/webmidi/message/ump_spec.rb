@@ -30,6 +30,15 @@ RSpec.describe Webmidi::Message::UMP::ChannelVoice64 do
     end
     expect(matched).to be true
   end
+
+  it "can copy with changed attributes" do
+    copy = msg.with(note: 61, timestamp: 10.0)
+
+    expect(copy).to be_a(described_class)
+    expect(copy.note).to eq(61)
+    expect(copy.velocity).to eq(0xC000)
+    expect(copy.timestamp).to eq(10.0)
+  end
 end
 
 RSpec.describe Webmidi::Message::UMP::ChannelVoice32 do
@@ -49,6 +58,14 @@ RSpec.describe Webmidi::Message::UMP::ChannelVoice32 do
 
   it "uses the MIDI 1.0 UMP channel voice bit layout" do
     expect(msg.to_bytes).to eq([0x20, 0x90, 60, 100])
+  end
+
+  it "can copy with changed attributes" do
+    copy = msg.with(data1: 61)
+
+    expect(copy).to be_a(described_class)
+    expect(copy.data1).to eq(61)
+    expect(copy.data2).to eq(100)
   end
 end
 
@@ -210,6 +227,15 @@ RSpec.describe Webmidi::Message::UMP do
     it "parses generic message type classes" do
       msg = described_class.from_words(0x30000000, 0x00000000)
       expect(msg).to be_a(Webmidi::Message::UMP::Data64)
+    end
+
+    it "can copy raw message type subclasses" do
+      msg = Webmidi::Message::UMP::Data64.new(words: [0x30000000, 0x00000000])
+      copy = msg.with(timestamp: 12.0)
+
+      expect(copy).to be_a(Webmidi::Message::UMP::Data64)
+      expect(copy.words).to eq([0x30000000, 0x00000000])
+      expect(copy.timestamp).to eq(12.0)
     end
 
     it "rejects raw words with a mismatched message type" do
