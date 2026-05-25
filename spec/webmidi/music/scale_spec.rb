@@ -22,6 +22,19 @@ RSpec.describe Webmidi::Music::Scale do
       expect { described_class.build(:C4, :unknown) }
         .to raise_error(Webmidi::InvalidMessageError)
     end
+
+    it "supports range policies" do
+      expect { described_class.build(:B8, :major) }.to raise_error(Webmidi::InvalidMessageError)
+      expect(described_class.build(:B8, :major, range: :clamp).last).to eq(127)
+      expect(described_class.build(:B8, :major, range: :allow_out_of_range).last).to eq(130)
+    end
+  end
+
+  describe ".define" do
+    it "defines custom scale intervals" do
+      described_class.define(:two_note, [0, 7])
+      expect(described_class.build(:C4, :two_note)).to eq([60, 67])
+    end
   end
 
   describe ".degree" do
@@ -29,6 +42,15 @@ RSpec.describe Webmidi::Music::Scale do
       expect(described_class.degree(:C4, :major, 1)).to eq(60) # C
       expect(described_class.degree(:C4, :major, 3)).to eq(64) # E
       expect(described_class.degree(:C4, :major, 5)).to eq(67) # G
+    end
+
+    it "is octave-aware" do
+      expect(described_class.degree(:C4, :major, 8)).to eq(72)
+      expect(described_class.degree(:C4, :major, 10)).to eq(76)
+    end
+
+    it "validates degree values" do
+      expect { described_class.degree(:C4, :major, 0) }.to raise_error(Webmidi::InvalidMessageError)
     end
   end
 

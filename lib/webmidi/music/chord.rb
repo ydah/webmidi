@@ -32,7 +32,8 @@ module Webmidi
 
       module_function
 
-      def build(root, type = :major, inversion: 0)
+      def build(root, type = :major, inversion: 0, range: :strict)
+        validate_inversion!(inversion)
         root_midi = Note.to_midi(root)
         intervals = TYPES[type] || @custom_types[type]
         raise InvalidMessageError, "Unknown chord type: #{type}" unless intervals
@@ -43,16 +44,47 @@ module Webmidi
           notes.push(notes.shift + 12)
         end
 
-        notes
+        apply_range_policy(notes, range)
       end
 
-      def define(name, &block)
-        @custom_types[name] = block.call(0)
+      def define(name, intervals = nil, &block)
+        intervals = block.call(0) if block
+        validate_intervals!(intervals)
+        @custom_types[name] = intervals.dup.freeze
+        self
       end
 
       def types
         TYPES.keys + @custom_types.keys
       end
+
+      def validate_inversion!(inversion)
+        return if inversion.is_a?(Integer) && inversion >= 0
+
+        raise InvalidMessageError, "Chord inversion must be a non-negative integer, got #{inversion.inspect}"
+      end
+
+      def validate_intervals!(intervals)
+        unless intervals.respond_to?(:each) && intervals.all? { |interval| interval.is_a?(Integer) }
+          raise InvalidMessageError, "Chord intervals must be integers"
+        end
+      end
+
+      def apply_range_policy(notes, range)
+        case range
+        when :strict
+          notes.each { |note| Note.validate_midi!(note) }
+          notes
+        when :clamp
+          notes.map { |note| note.clamp(0, 127) }
+        when :allow_out_of_range
+          notes
+        else
+          raise InvalidMessageError, "Unknown range policy: #{range.inspect}"
+        end
+      end
+
+      private_class_method :validate_inversion!, :validate_intervals!, :apply_range_policy
     end
   end
 end

@@ -22,8 +22,18 @@ RSpec.describe Webmidi::Music::Note do
       expect(described_class.to_midi(60)).to eq(60)
     end
 
+    it "validates integer range by default" do
+      expect { described_class.to_midi(200) }.to raise_error(Webmidi::InvalidMessageError)
+      expect(described_class.to_midi(200, validate: false)).to eq(200)
+    end
+
     it "handles negative octaves" do
       expect(described_class.to_midi("C-1")).to eq(0)
+    end
+
+    it "supports double accidentals" do
+      expect(described_class.to_midi("C##4")).to eq(62)
+      expect(described_class.to_midi("Dbb4")).to eq(60)
     end
 
     it "raises on invalid input" do
@@ -43,6 +53,10 @@ RSpec.describe Webmidi::Music::Note do
     it "supports flats" do
       expect(described_class.to_name(61, sharps: false)).to eq("Db4")
     end
+
+    it "validates MIDI note range" do
+      expect { described_class.to_name(128) }.to raise_error(Webmidi::InvalidMessageError)
+    end
   end
 
   describe ".to_frequency" do
@@ -53,11 +67,21 @@ RSpec.describe Webmidi::Music::Note do
     it "converts C4 to ~261.63Hz" do
       expect(described_class.to_frequency(60)).to be_within(0.01).of(261.63)
     end
+
+    it "validates inputs" do
+      expect { described_class.to_frequency(128) }.to raise_error(Webmidi::InvalidMessageError)
+      expect { described_class.to_frequency(60, a4: 0) }.to raise_error(Webmidi::InvalidMessageError)
+    end
   end
 
   describe ".from_frequency" do
     it "converts 440Hz to A4" do
       expect(described_class.from_frequency(440.0)).to eq(69)
+    end
+
+    it "validates inputs" do
+      expect { described_class.from_frequency(0) }.to raise_error(Webmidi::InvalidMessageError)
+      expect { described_class.from_frequency(440.0, a4: -1) }.to raise_error(Webmidi::InvalidMessageError)
     end
   end
 end

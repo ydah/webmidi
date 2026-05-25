@@ -25,16 +25,18 @@ module Webmidi
 
       module_function
 
-      def build(root, type = :major)
+      def build(root, type = :major, range: :strict)
         root_midi = Note.to_midi(root)
         intervals = TYPES[type] || @custom_types[type]
         raise InvalidMessageError, "Unknown scale type: #{type}" unless intervals
 
-        intervals.map { |i| root_midi + i }
+        apply_range_policy(intervals.map { |i| root_midi + i }, range)
       end
 
       def define(name, intervals)
+        validate_intervals!(intervals)
         @custom_types[name] = intervals
+        self
       end
 
       def types
@@ -42,9 +44,42 @@ module Webmidi
       end
 
       def degree(root, type, degree_num)
-        notes = build(root, type)
-        notes[(degree_num - 1) % notes.size]
+        unless degree_num.is_a?(Integer) && degree_num.positive?
+          raise InvalidMessageError, "Scale degree must be a positive integer, got #{degree_num.inspect}"
+        end
+
+        root_midi = Note.to_midi(root)
+        intervals = TYPES[type] || @custom_types[type]
+        raise InvalidMessageError, "Unknown scale type: #{type}" unless intervals
+
+        index = (degree_num - 1) % intervals.size
+        octave = (degree_num - 1) / intervals.size
+        note = root_midi + intervals[index] + (octave * 12)
+        Note.validate_midi!(note)
+        note
       end
+
+      def validate_intervals!(intervals)
+        unless intervals.respond_to?(:each) && intervals.all? { |interval| interval.is_a?(Integer) }
+          raise InvalidMessageError, "Scale intervals must be integers"
+        end
+      end
+
+      def apply_range_policy(notes, range)
+        case range
+        when :strict
+          notes.each { |note| Note.validate_midi!(note) }
+          notes
+        when :clamp
+          notes.map { |note| note.clamp(0, 127) }
+        when :allow_out_of_range
+          notes
+        else
+          raise InvalidMessageError, "Unknown range policy: #{range.inspect}"
+        end
+      end
+
+      private_class_method :validate_intervals!, :apply_range_policy
     end
   end
 end
