@@ -6,6 +6,11 @@ require "tmpdir"
 
 RSpec::Core::RakeTask.new(:spec)
 
+task :standard do
+  ENV["RUBOCOP_CACHE_ROOT"] ||= File.expand_path("tmp/rubocop_cache", __dir__)
+  sh "standardrb"
+end
+
 task :smoke_require do
   ruby "-Ilib", "-e", "require 'webmidi'"
 end
@@ -17,7 +22,7 @@ task :build_gem do
 end
 
 namespace :release do
-  task check: [:spec, :smoke_require, :build_gem] do
+  task check: [:standard, :spec, :smoke_require, :build_gem] do
     spec = Gem::Specification.load("webmidi.gemspec")
     raise "Missing version" if spec.version.to_s.empty?
     raise "CHANGELOG.md is missing" unless File.exist?("CHANGELOG.md")
