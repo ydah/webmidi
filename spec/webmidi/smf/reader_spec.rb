@@ -134,6 +134,72 @@ RSpec.describe Webmidi::SMF::Reader do
 
       expect { described_class.parse(binary) }.to raise_error(Webmidi::InvalidSMFError)
     end
+
+    it "rejects a truncated header chunk" do
+      binary = String.new(encoding: Encoding::ASCII_8BIT)
+      binary << "MThd" << [6].pack("N") << [1].pack("n")
+
+      expect { described_class.parse(binary) }
+        .to raise_error(Webmidi::InvalidSMFError, /Unexpected end/)
+    end
+
+    it "rejects missing declared tracks" do
+      binary = String.new(encoding: Encoding::ASCII_8BIT)
+      binary << "MThd" << [6].pack("N") << [1, 1, 480].pack("nnn")
+
+      expect { described_class.parse(binary) }
+        .to raise_error(Webmidi::InvalidSMFError, /Unexpected end/)
+    end
+
+    it "rejects running status without a prior channel status" do
+      track_data = String.new(encoding: Encoding::ASCII_8BIT)
+      track_data << vlq(0) << [60, 100].pack("C*")
+      binary = build_midi_binary(tracks: [track_data])
+
+      expect { described_class.parse(binary) }
+        .to raise_error(Webmidi::InvalidSMFError, /No running status/)
+    end
+
+    it "rejects unknown chunks when skipping is disabled" do
+      track_data = String.new(encoding: Encoding::ASCII_8BIT)
+      track_data << vlq(0) << [0xFF, 0x2F, 0x00].pack("C*")
+      binary = String.new(encoding: Encoding::ASCII_8BIT)
+      binary << "MThd" << [6].pack("N") << [1, 1, 480].pack("nnn")
+      binary << "JUNK" << [4].pack("N") << "skip"
+      binary << "MTrk" << [track_data.bytesize].pack("N") << track_data
+
+      expect { described_class.parse(binary, skip_unknown_chunks: false) }
+        .to raise_error(Webmidi::InvalidSMFError, /expected 'MTrk'/)
+    end
+
+    it "rejects oversized track lengths that exceed the file" do
+      track_data = String.new(encoding: Encoding::ASCII_8BIT)
+      track_data << vlq(0) << [0xFF, 0x2F, 0x00].pack("C*")
+      binary = String.new(encoding: Encoding::ASCII_8BIT)
+      binary << "MThd" << [6].pack("N") << [1, 1, 480].pack("nnn")
+      binary << "MTrk" << [track_data.bytesize + 10].pack("N") << track_data
+
+      expect { described_class.parse(binary) }
+        .to raise_error(Webmidi::InvalidSMFError, /Unexpected end/)
+    end
+
+    it "rejects truncated meta event payloads" do
+      track_data = String.new(encoding: Encoding::ASCII_8BIT)
+      track_data << vlq(0) << [0xFF, 0x03].pack("C*") << vlq(5) << "abc"
+      binary = build_midi_binary(tracks: [track_data])
+
+      expect { described_class.parse(binary) }
+        .to raise_error(Webmidi::InvalidSMFError, /Unexpected end/)
+    end
+
+    it "rejects truncated SysEx event payloads" do
+      track_data = String.new(encoding: Encoding::ASCII_8BIT)
+      track_data << vlq(0) << [0xF0].pack("C*") << vlq(4) << [0x7E, 0x7F].pack("C*")
+      binary = build_midi_binary(tracks: [track_data])
+
+      expect { described_class.parse(binary) }
+        .to raise_error(Webmidi::InvalidSMFError, /Unexpected end/)
+    end
   end
 
   describe ".read" do
