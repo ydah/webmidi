@@ -99,8 +99,10 @@ module Webmidi
         attr_reader :words
 
         def initialize(message_type:, words:, group: 0, timestamp: nil)
-          validate_words!(words)
+          words = normalize_words!(words)
           validate_word_count!(message_type, words)
+          validate_range!(group, "Group", 0, 15)
+          validate_word_header!(message_type, group, words.first)
           @words = words.dup.freeze
           super(message_type: message_type, group: group, timestamp: timestamp)
         end
@@ -115,14 +117,16 @@ module Webmidi
 
         private
 
-        def validate_words!(words)
+        def normalize_words!(words)
           unless words.respond_to?(:each)
             raise InvalidMessageError, "UMP words must be enumerable, got #{words.class}"
           end
 
+          words = words.to_a
           words.each_with_index do |word, index|
             validate_range!(word, "Word at index #{index}", 0, 0xFFFF_FFFF)
           end
+          words
         end
 
         def validate_word_count!(message_type, words)
@@ -130,6 +134,21 @@ module Webmidi
           return if words.size == expected
 
           raise InvalidMessageError, "#{message_type} UMP must have #{expected} word(s), got #{words.size}"
+        end
+
+        def validate_word_header!(message_type, group, word)
+          actual_type = (word >> 28) & 0x0F
+          expected_type = MESSAGE_TYPES.fetch(message_type)
+          unless actual_type == expected_type
+            raise InvalidMessageError,
+              "#{message_type} UMP first word has message type 0x#{actual_type.to_s(16).upcase}"
+          end
+
+          actual_group = (word >> 24) & 0x0F
+          return if actual_group == group
+
+          raise InvalidMessageError,
+            "#{message_type} UMP first word has group #{actual_group}, got group #{group}"
         end
 
         def words_to_bytes(words)

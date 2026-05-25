@@ -111,9 +111,22 @@ RSpec.describe Webmidi::Message::UMP do
       expect(midi2.velocity).to eq(2_705_491_209)
     end
 
+    it "converts PitchBend" do
+      midi1 = Webmidi::Message.pitch_bend(0, channel: 2)
+      midi2 = described_class.upgrade(midi1, group: 1)
+
+      expect(midi2.status).to eq(:pitch_bend)
+      expect(midi2.channel).to eq(2)
+      expect(midi2.group).to eq(1)
+      expect(midi2.velocity).to eq(0)
+      expect(midi2.to_bytes).to eq([0x41, 0xE2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+    end
+
     it "preserves scaling endpoints" do
       expect(described_class.upgrade(Webmidi::Message.note_on(60, velocity: 0)).velocity).to eq(0)
       expect(described_class.upgrade(Webmidi::Message.note_on(60, velocity: 127)).velocity).to eq(0xFFFF)
+      expect(described_class.upgrade(Webmidi::Message.pitch_bend(0)).velocity).to eq(0)
+      expect(described_class.upgrade(Webmidi::Message.pitch_bend(16_383)).velocity).to eq(0xFFFF_FFFF)
     end
 
     it "exposes the MIDI 1.0 to UMP correspondence table" do
@@ -174,6 +187,15 @@ RSpec.describe Webmidi::Message::UMP do
       expect(downgraded.pressure).to eq(90)
       expect(downgraded.channel).to eq(2)
     end
+
+    it "round-trips PitchBend through upgrade/downgrade" do
+      original = Webmidi::Message.pitch_bend(12_345, channel: 8)
+      downgraded = described_class.downgrade(described_class.upgrade(original))
+
+      expect(downgraded).to be_a(Webmidi::Message::Channel::PitchBend)
+      expect(downgraded.value).to eq(12_345)
+      expect(downgraded.channel).to eq(8)
+    end
   end
 
   describe ".from_bytes / .from_words" do
@@ -188,6 +210,18 @@ RSpec.describe Webmidi::Message::UMP do
     it "parses generic message type classes" do
       msg = described_class.from_words(0x30000000, 0x00000000)
       expect(msg).to be_a(Webmidi::Message::UMP::Data64)
+    end
+
+    it "rejects raw words with a mismatched message type" do
+      expect do
+        Webmidi::Message::UMP::Data64.new(words: [0x20000000, 0x00000000])
+      end.to raise_error(Webmidi::InvalidMessageError, /message type/)
+    end
+
+    it "rejects raw words with a mismatched group" do
+      expect do
+        Webmidi::Message::UMP::Data64.new(words: [0x31000000, 0x00000000], group: 2)
+      end.to raise_error(Webmidi::InvalidMessageError, /group/)
     end
   end
 end
