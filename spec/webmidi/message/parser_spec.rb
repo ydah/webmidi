@@ -27,6 +27,11 @@ RSpec.describe Webmidi::Message::Parser do
         .to raise_error(Webmidi::InvalidMessageError, /between 0 and 255/)
     end
 
+    it "raises on status-range data bytes" do
+      expect { described_class.parse_single([0xF2, 0x80, 0x00]) }
+        .to raise_error(Webmidi::InvalidMessageError, /Data byte/)
+    end
+
     it "raises on invalid system status" do
       expect { described_class.parse_single([0xF4]) }
         .to raise_error(Webmidi::InvalidMessageError)
@@ -92,6 +97,26 @@ RSpec.describe Webmidi::Message::Parser do
     it "supports running status when enabled" do
       messages = described_class.parse_stream([0x90, 60, 100, 61, 110])
       expect(messages.map { |message| [message.note, message.velocity] }).to eq([[60, 100], [61, 110]])
+    end
+
+    it "keeps running status across real-time messages" do
+      messages = described_class.parse_stream([0x90, 60, 100, 0xF8, 61, 110])
+      expect(messages.map(&:class)).to eq([
+        Webmidi::Message::Channel::NoteOn,
+        Webmidi::Message::System::Clock,
+        Webmidi::Message::Channel::NoteOn
+      ])
+      expect(messages.last.note).to eq(61)
+    end
+
+    it "clears running status after system common messages" do
+      expect { described_class.parse_stream([0x90, 60, 100, 0xF6, 61, 110]) }
+        .to raise_error(Webmidi::InvalidMessageError, /without status/)
+    end
+
+    it "clears running status after SysEx messages" do
+      expect { described_class.parse_stream([0x90, 60, 100, 0xF0, 0x01, 0xF7, 61, 110]) }
+        .to raise_error(Webmidi::InvalidMessageError, /without status/)
     end
 
     it "rejects running status in parse_many" do

@@ -43,6 +43,7 @@ module Webmidi
         end
 
         validate_exact_length!(bytes, message_length(status))
+        validate_data_bytes!(bytes[1..])
 
         case status & 0xF0
         when 0x80
@@ -91,7 +92,7 @@ module Webmidi
               validate_status!(byte)
               pending = [byte]
               needed = (byte == 0xF0) ? :sysex : message_length(byte)
-              last_channel_status = byte if channel_status?(byte)
+              last_channel_status = channel_status?(byte) ? byte : nil
             end
           elsif needed == :sysex
             validate_sysex_data_or_end!(byte)
@@ -260,6 +261,14 @@ module Webmidi
         raise InvalidMessageError, "SysEx data byte must be between 0 and 127, got #{format_byte(byte)}"
       end
 
+      def validate_data_bytes!(bytes)
+        bytes.each_with_index do |byte, index|
+          next if byte.between?(0, 127)
+
+          raise InvalidMessageError, "Data byte at index #{index + 1} must be between 0 and 127, got #{format_byte(byte)}"
+        end
+      end
+
       def message_complete?(pending, needed)
         return pending.last == 0xF7 if needed == :sysex
 
@@ -292,7 +301,7 @@ module Webmidi
         :parse_pitch_bend, :parse_system, :parse_sysex, :message_length,
         :validate_bytes!, :validate_status!, :invalid_status!,
         :validate_exact_length!, :validate_sysex_data_or_end!,
-        :validate_sysex_data!, :message_complete?, :raise_incomplete!,
+        :validate_sysex_data!, :validate_data_bytes!, :message_complete?, :raise_incomplete!,
         :real_time_status?, :channel_status?, :format_byte
     end
   end

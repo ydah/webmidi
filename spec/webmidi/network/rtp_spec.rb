@@ -76,6 +76,17 @@ RSpec.describe Webmidi::Network::RTP::Session do
     expect(session.peers).to be_empty
   end
 
+  it "validates raw outgoing MIDI byte arrays" do
+    expect { session.send([0x90, 60]) }
+      .to raise_error(Webmidi::InvalidMessageError)
+  end
+
+  it "accepts arrays of MIDI messages for outgoing packets" do
+    expect do
+      session.send([Webmidi::Message.note_on(60), Webmidi::Message.note_off(60)])
+    end.not_to raise_error
+  end
+
   it "receives multiple MIDI messages from one packet" do
     received = []
     session.on_message { |message| received << message }

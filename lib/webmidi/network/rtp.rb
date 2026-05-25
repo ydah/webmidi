@@ -150,14 +150,7 @@ module Webmidi
         end
 
         def send(message)
-          bytes = case message
-          when Message::Base
-            message.to_bytes
-          when Array
-            message
-          else
-            raise InvalidMessageError, "Expected Message or Array"
-          end
+          bytes = outbound_midi_bytes(message)
 
           packet = Packet.new(
             sequence_number: next_sequence,
@@ -196,6 +189,19 @@ module Webmidi
         end
 
         private
+
+        def outbound_midi_bytes(message)
+          case message
+          when Message::Base
+            message.to_bytes
+          when Array
+            return Message.parse_many(message, normalize_note_on_zero: false).flat_map(&:to_bytes) if message.all?(Integer)
+
+            message.compact.flat_map { |item| outbound_midi_bytes(item) }
+          else
+            raise InvalidMessageError, "Expected Message or Array"
+          end
+        end
 
         def next_sequence
           @mutex.synchronize do
