@@ -143,4 +143,34 @@ RSpec.describe Webmidi::SMF::Writer do
       expect(name_event.text).to eq("Piano")
     end
   end
+
+  describe "generated round-trips" do
+    it "round-trips deterministic generated note sequences" do
+      random = Random.new(1234)
+
+      10.times do
+        seq = Webmidi::SMF::Sequence.new(format: 0, ppqn: 480)
+        track = Webmidi::SMF::Track.new
+        expected = []
+
+        8.times do
+          note = random.rand(36..84)
+          velocity = random.rand(1..127)
+          delta = random.rand(0..120)
+          duration = random.rand(1..240)
+          on = Webmidi::Message.note_on(note, velocity: velocity)
+          off = Webmidi::Message.note_off(note)
+          track << Webmidi::SMF::MIDIEvent.new(message: on, delta_time: delta)
+          track << Webmidi::SMF::MIDIEvent.new(message: off, delta_time: duration)
+          expected << on.to_bytes << off.to_bytes
+        end
+
+        seq.add_track(track)
+        parsed = Webmidi::SMF::Reader.parse(described_class.to_binary(seq))
+        actual = parsed[0].events.grep(Webmidi::SMF::MIDIEvent).map(&:to_bytes)
+
+        expect(actual).to eq(expected)
+      end
+    end
+  end
 end
