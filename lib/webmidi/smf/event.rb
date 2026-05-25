@@ -6,16 +6,28 @@ module Webmidi
       attr_reader :delta_time, :absolute_time
 
       def initialize(delta_time: 0, absolute_time: 0)
+        validate_time!(delta_time, "Delta time")
+        validate_time!(absolute_time, "Absolute time")
         @delta_time = delta_time
         @absolute_time = absolute_time
       end
 
       def absolute_time=(time)
+        validate_time!(time, "Absolute time")
         @absolute_time = time
       end
 
       def delta_time=(time)
+        validate_time!(time, "Delta time")
         @delta_time = time
+      end
+
+      private
+
+      def validate_time!(time, name)
+        return if time.is_a?(Integer) && time >= 0
+
+        raise InvalidSMFError, "#{name} must be a non-negative integer, got #{time.inspect}"
       end
     end
 
@@ -55,14 +67,16 @@ module Webmidi
 
       def initialize(type:, data: [], **kwargs)
         super(**kwargs)
+        validate_type!(type)
+        validate_data!(data)
         @type = type
         @data = data.frozen? ? data : data.dup.freeze
       end
 
-      def text
+      def text(encoding: Encoding::UTF_8)
         return nil unless text_event?
 
-        @data.pack("C*").force_encoding("UTF-8")
+        @data.pack("C*").force_encoding(encoding)
       end
 
       def text_event?
@@ -84,6 +98,8 @@ module Webmidi
       end
 
       def self.tempo(bpm, **kwargs)
+        raise InvalidSMFError, "Tempo BPM must be positive, got #{bpm.inspect}" unless bpm.is_a?(Numeric) && bpm.positive?
+
         microseconds = (60_000_000.0 / bpm).round
         data = [
           (microseconds >> 16) & 0xFF,
@@ -93,8 +109,13 @@ module Webmidi
         new(type: META_TYPES[:tempo], data: data, **kwargs)
       end
 
-      def self.track_name(name, **kwargs)
-        new(type: META_TYPES[:track_name], data: name.encode("UTF-8").bytes, **kwargs)
+      def self.text(value, type: :text, encoding: Encoding::UTF_8, **kwargs)
+        meta_type = type.is_a?(Symbol) ? META_TYPES.fetch(type) : type
+        new(type: meta_type, data: value.encode(encoding).bytes, **kwargs)
+      end
+
+      def self.track_name(name, encoding: Encoding::UTF_8, **kwargs)
+        text(name, type: :track_name, encoding: encoding, **kwargs)
       end
 
       def self.end_of_track(**kwargs)
@@ -102,13 +123,52 @@ module Webmidi
       end
 
       def self.time_signature(numerator: 4, denominator: 4, clocks_per_click: 24, notes_per_quarter: 8, **kwargs)
+        unless numerator.is_a?(Integer) && numerator.positive?
+          raise InvalidSMFError, "Time signature numerator must be positive, got #{numerator.inspect}"
+        end
+        unless denominator.is_a?(Integer) && denominator.positive? && (denominator & (denominator - 1)).zero?
+          raise InvalidSMFError, "Time signature denominator must be a power of two, got #{denominator.inspect}"
+        end
+        [clocks_per_click, notes_per_quarter].each do |value|
+          raise InvalidSMFError, "Time signature values must be bytes" unless value.is_a?(Integer) && value.between?(0, 255)
+        end
+
         dd = Math.log2(denominator).to_i
         new(type: META_TYPES[:time_signature], data: [numerator, dd, clocks_per_click, notes_per_quarter], **kwargs)
       end
 
       def self.key_signature(key: 0, scale: 0, **kwargs)
+        raise InvalidSMFError, "Key signature must be between -7 and 7, got #{key.inspect}" unless key.is_a?(Integer) && key.between?(-7, 7)
+
+        scale = case scale
+                when :major then 0
+                when :minor then 1
+                else scale
+                end
+        raise InvalidSMFError, "Key signature scale must be 0/:major or 1/:minor" unless [0, 1].include?(scale)
+
         sf = key < 0 ? (256 + key) : key
         new(type: META_TYPES[:key_signature], data: [sf, scale], **kwargs)
+      end
+
+      private
+
+      def validate_type!(type)
+        return if type.is_a?(Integer) && type.between?(0, 127)
+
+        raise InvalidSMFError, "Meta event type must be between 0 and 127, got #{type.inspect}"
+      end
+
+      def validate_data!(data)
+        unless data.respond_to?(:each)
+          raise InvalidSMFError, "Meta event data must be enumerable, got #{data.class}"
+        end
+
+        data.each_with_index do |byte, index|
+          next if byte.is_a?(Integer) && byte.between?(0, 255)
+
+          raise InvalidSMFError, "Meta event data byte #{index} must be between 0 and 255, got #{byte.inspect}"
+        end
       end
     end
 
@@ -117,11 +177,29 @@ module Webmidi
 
       def initialize(data:, **kwargs)
         super(**kwargs)
-        @data = data.frozen? ? data : data.dup.freeze
+        bytes = normalize_data(data)
+        @data = bytes.frozen? ? bytes : bytes.dup.freeze
       end
 
       def to_bytes
-        [0xF0, *@data, 0xF7]
+        @data.last == 0xF7 ? [0xF0, *@data] : [0xF0, *@data, 0xF7]
+      end
+
+      private
+
+      def normalize_data(data)
+        unless data.respond_to?(:each)
+          raise InvalidSMFError, "SysEx event data must be enumerable, got #{data.class}"
+        end
+
+        bytes = data.to_a
+        bytes = bytes[1..] if bytes.first == 0xF0
+        bytes.each_with_index do |byte, index|
+          next if byte.is_a?(Integer) && byte.between?(0, 255)
+
+          raise InvalidSMFError, "SysEx event data byte #{index} must be between 0 and 255, got #{byte.inspect}"
+        end
+        bytes
       end
     end
   end

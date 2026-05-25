@@ -97,6 +97,43 @@ RSpec.describe Webmidi::SMF::Reader do
       seq = described_class.parse(binary)
       expect(seq[0].events.first.delta_time).to eq(128)
     end
+
+    it "rejects VLQ longer than 4 bytes" do
+      track_data = String.new(encoding: Encoding::ASCII_8BIT)
+      track_data << [0x81, 0x81, 0x81, 0x81, 0x00].pack("C*") << [0xFF, 0x2F, 0x00].pack("C*")
+      binary = build_midi_binary(tracks: [track_data])
+
+      expect { described_class.parse(binary) }.to raise_error(Webmidi::InvalidSMFError, /VLQ exceeds 4 bytes/)
+    end
+
+    it "skips unknown chunks before tracks" do
+      track_data = String.new(encoding: Encoding::ASCII_8BIT)
+      track_data << vlq(0) << [0xFF, 0x2F, 0x00].pack("C*")
+      binary = String.new(encoding: Encoding::ASCII_8BIT)
+      binary << "MThd" << [6].pack("N") << [1, 1, 480].pack("nnn")
+      binary << "JUNK" << [4].pack("N") << "skip"
+      binary << "MTrk" << [track_data.bytesize].pack("N") << track_data
+
+      expect(described_class.parse(binary).size).to eq(1)
+    end
+
+    it "stops at end of track and skips trailing bytes" do
+      track_data = String.new(encoding: Encoding::ASCII_8BIT)
+      track_data << vlq(0) << [0xFF, 0x2F, 0x00].pack("C*")
+      track_data << vlq(0) << [0x90, 60, 100].pack("C*")
+      binary = build_midi_binary(tracks: [track_data])
+
+      seq = described_class.parse(binary)
+      expect(seq[0].events.size).to eq(1)
+    end
+
+    it "enforces track chunk boundaries" do
+      track_data = String.new(encoding: Encoding::ASCII_8BIT)
+      track_data << vlq(0) << [0x90, 60].pack("C*")
+      binary = build_midi_binary(tracks: [track_data])
+
+      expect { described_class.parse(binary) }.to raise_error(Webmidi::InvalidSMFError)
+    end
   end
 
   describe ".read" do

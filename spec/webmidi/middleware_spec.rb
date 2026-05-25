@@ -20,6 +20,21 @@ RSpec.describe Webmidi::Middleware::Stack do
     result = stack.call(Webmidi::Message.note_on(60))
     expect(result.note).to eq(65)
   end
+
+  it "caches the built middleware chain" do
+    built = 0
+    middleware = Class.new(Webmidi::Middleware::Base) do
+      define_method(:initialize) do |app, **options|
+        built += 1
+        super(app, **options)
+      end
+    end
+    stack = described_class.new { use middleware }
+
+    2.times { stack.call(Webmidi::Message.note_on(60)) }
+
+    expect(built).to eq(1)
+  end
 end
 
 RSpec.describe Webmidi::Middleware::Filter do
@@ -37,6 +52,13 @@ RSpec.describe Webmidi::Middleware::Filter do
 
     expect(filter.call(Webmidi::Message.note_on(60))).not_to be_nil
     expect(filter.call(Webmidi::Message.control_change(1, 64))).to be_nil
+  end
+
+  it "can exclude system messages when filtering by channel" do
+    app = ->(msg) { msg }
+    filter = described_class.new(app, channels: [0], include_system: false)
+
+    expect(filter.call(Webmidi::Message.clock)).to be_nil
   end
 end
 
@@ -65,6 +87,14 @@ RSpec.describe Webmidi::Middleware::Transpose do
     result = transposer.call(msg)
     expect(result).to eq(msg)
   end
+
+  it "preserves timestamps" do
+    app = ->(msg) { msg }
+    transposer = described_class.new(app, semitones: 1)
+    msg = Webmidi::Message.note_on(60)
+
+    expect(transposer.call(msg).timestamp).to eq(msg.timestamp)
+  end
 end
 
 RSpec.describe Webmidi::Middleware::VelocityScale do
@@ -90,6 +120,21 @@ RSpec.describe Webmidi::Middleware::VelocityScale do
 
     result = scaler.call(Webmidi::Message.note_on(60, velocity: 90))
     expect(result.velocity).to be < 90
+  end
+
+  it "can leave note-off velocity unchanged" do
+    app = ->(msg) { msg }
+    scaler = described_class.new(app, factor: 2.0, include_note_off: false)
+    msg = Webmidi::Message.note_off(60, velocity: 10)
+
+    expect(scaler.call(msg)).to eq(msg)
+  end
+
+  it "validates options" do
+    app = ->(msg) { msg }
+    expect { described_class.new(app, factor: -1) }.to raise_error(Webmidi::InvalidMessageError)
+    expect { described_class.new(app, min: 100, max: 10) }.to raise_error(Webmidi::InvalidMessageError)
+    expect { described_class.new(app, curve: :unknown) }.to raise_error(Webmidi::InvalidMessageError)
   end
 end
 
@@ -124,6 +169,15 @@ RSpec.describe Webmidi::Middleware::Recorder do
     expect(recorder.recording?).to be true
 
     recorder.stop
+    expect(recorder.recording?).to be false
+  end
+
+  it "stops recording when a block raises" do
+    recorder = described_class.new
+    expect do
+      recorder.record { raise "boom" }
+    end.to raise_error(RuntimeError, "boom")
+
     expect(recorder.recording?).to be false
   end
 end

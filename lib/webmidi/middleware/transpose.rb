@@ -11,9 +11,7 @@ module Webmidi
       def call(message)
         if note_message?(message)
           new_note = (message.note + @semitones).clamp(0, 127)
-          transposed = message.class.new(
-            **message.deconstruct_keys(nil).merge(note: new_note)
-          )
+          transposed = message.with(note: new_note)
           @app.call(transposed)
         else
           @app.call(message)

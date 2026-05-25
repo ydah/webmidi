@@ -5,20 +5,23 @@ module Webmidi
     class Stack
       def initialize(&block)
         @middlewares = []
+        @app_cache = nil
         instance_eval(&block) if block
       end
 
       def use(middleware_class_or_proc, **options)
         @middlewares << [middleware_class_or_proc, options]
+        @app_cache = nil
         self
       end
 
       def call(message)
-        app = build
-        app.call(message)
+        build.call(message)
       end
 
       def build
+        return @app_cache if @app_cache
+
         endpoint = ->(msg) { msg }
         @middlewares.reverse_each do |middleware, options|
           current_app = endpoint
@@ -28,7 +31,7 @@ module Webmidi
                        middleware.new(current_app, **options)
                      end
         end
-        endpoint
+        @app_cache = endpoint
       end
 
       private

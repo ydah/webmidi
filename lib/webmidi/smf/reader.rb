@@ -5,16 +5,16 @@ module Webmidi
     module Reader
       module_function
 
-      def read(path_or_io)
+      def read(path_or_io, **options)
         data = if path_or_io.respond_to?(:read)
                  path_or_io.read
                else
                  File.binread(path_or_io)
                end
-        parse(data)
+        parse(data, **options)
       end
 
-      def parse(binary)
+      def parse(binary, skip_unknown_chunks: true, stop_at_end_of_track: true)
         binary = binary.b if binary.encoding != Encoding::ASCII_8BIT
         stream = StringStream.new(binary)
 
@@ -22,7 +22,8 @@ module Webmidi
         sequence = Sequence.new(format: format, ppqn: ppqn)
 
         num_tracks.times do
-          track = read_track(stream)
+          track = read_track(stream, skip_unknown_chunks: skip_unknown_chunks,
+                             stop_at_end_of_track: stop_at_end_of_track)
           sequence.add_track(track)
         end
 
@@ -39,6 +40,7 @@ module Webmidi
         format = stream.read_uint16
         num_tracks = stream.read_uint16
         division = stream.read_uint16
+        raise InvalidSMFError, "SMF format 0 must have exactly one track" if format.zero? && num_tracks != 1
 
         if (division & 0x8000).zero?
           ppqn = division
@@ -49,35 +51,49 @@ module Webmidi
         [format, num_tracks, ppqn]
       end
 
-      def read_track(stream) # rubocop:disable Metrics/MethodLength,Metrics/CyclomaticComplexity
-        chunk_id = stream.read_bytes(4)
-        raise InvalidSMFError, "Invalid track header: expected 'MTrk', got '#{chunk_id}'" unless chunk_id == "MTrk"
+      def read_track(stream, skip_unknown_chunks:, stop_at_end_of_track:) # rubocop:disable Metrics/MethodLength
+        loop do
+          chunk_id = stream.read_bytes(4)
+          chunk_size = stream.read_uint32
 
-        chunk_size = stream.read_uint32
-        track_end = stream.position + chunk_size
-        track = Track.new
-        running_status = nil
-        absolute_time = 0
+          unless chunk_id == "MTrk"
+            raise InvalidSMFError, "Invalid track header: expected 'MTrk', got '#{chunk_id}'" unless skip_unknown_chunks
 
-        while stream.position < track_end
-          delta_time = stream.read_vlq
-          absolute_time += delta_time
-
-          status_byte = stream.peek_byte
-
-          if status_byte >= 0x80
-            stream.read_byte
-            running_status = status_byte if status_byte < 0xF0
-          else
-            status_byte = running_status
-            raise InvalidSMFError, "No running status available" unless status_byte
+            stream.skip(chunk_size)
+            next
           end
 
-          event = parse_event(stream, status_byte, delta_time, absolute_time)
-          track << event if event
-        end
+          track_end = stream.position + chunk_size
+          track = Track.new
+          running_status = nil
+          absolute_time = 0
 
-        track
+          stream.with_limit(track_end) do
+            while stream.position < track_end
+              delta_time = stream.read_vlq
+              absolute_time += delta_time
+
+              status_byte = stream.peek_byte
+
+              if status_byte >= 0x80
+                stream.read_byte
+                running_status = status_byte if status_byte < 0xF0
+              else
+                status_byte = running_status
+                raise InvalidSMFError, "No running status available" unless status_byte
+              end
+
+              event = parse_event(stream, status_byte, delta_time, absolute_time)
+              track << event if event
+              if stop_at_end_of_track && end_of_track?(event)
+                stream.skip(track_end - stream.position)
+                break
+              end
+            end
+          end
+
+          return track
+        end
       end
 
       def parse_event(stream, status_byte, delta_time, absolute_time)
@@ -116,12 +132,17 @@ module Webmidi
                   raise InvalidSMFError, "Unknown MIDI status: #{format("0x%02X", status_byte)}"
                 end
 
-        message = Message.from_bytes(bytes)
+        message = Message.from_bytes(bytes, normalize_note_on_zero: false)
         MIDIEvent.new(message: message, delta_time: delta_time, absolute_time: absolute_time)
       end
 
+      def end_of_track?(event)
+        event.is_a?(MetaEvent) && event.type == MetaEvent::META_TYPES[:end_of_track]
+      end
+
       private_class_method :read_header, :read_track, :parse_event,
-                           :parse_meta_event, :parse_sysex_event, :parse_midi_event
+                           :parse_meta_event, :parse_sysex_event, :parse_midi_event,
+                           :end_of_track?
 
       class StringStream
         attr_reader :position
@@ -157,6 +178,19 @@ module Webmidi
           @data.getbyte(@position)
         end
 
+        def skip(n)
+          ensure_available!(n)
+          @position += n
+        end
+
+        def with_limit(limit)
+          @limits ||= []
+          @limits.push(limit)
+          yield
+        ensure
+          @limits.pop
+        end
+
         def read_uint16
           ensure_available!(2)
           val = (@data.getbyte(@position) << 8) | @data.getbyte(@position + 1)
@@ -176,20 +210,26 @@ module Webmidi
 
         def read_vlq
           value = 0
-          loop do
+          4.times do
             byte = read_byte
             value = (value << 7) | (byte & 0x7F)
-            break unless (byte & 0x80) != 0
+            return value unless (byte & 0x80) != 0
           end
-          value
+
+          raise InvalidSMFError, "VLQ exceeds 4 bytes"
         end
 
         private
 
         def ensure_available!(n)
-          return if @position + n <= @data.bytesize
+          limit = [@data.bytesize, current_limit].min
+          return if @position + n <= limit
 
           raise InvalidSMFError, "Unexpected end of data at position #{@position}, need #{n} more bytes"
+        end
+
+        def current_limit
+          (@limits && @limits.last) || @data.bytesize
         end
       end
     end

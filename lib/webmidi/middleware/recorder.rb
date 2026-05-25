@@ -9,55 +9,68 @@ module Webmidi
         super(app || ->(msg) { msg }, **options)
         @tape = Tape.new
         @recording = false
+        @mutex = Mutex.new
       end
 
       def call(message)
-        @tape.add(message) if @recording
+        tape = @mutex.synchronize { @recording ? @tape : nil }
+        tape&.add(message)
         @app.call(message)
       end
 
       def record
-        @tape = Tape.new
-        @recording = true
-        if block_given?
-          yield
-          @recording = false
+        @mutex.synchronize do
+          @tape = Tape.new
+          @recording = true
         end
-        @tape
+        if block_given?
+          begin
+            yield
+          ensure
+            @mutex.synchronize { @recording = false }
+          end
+        end
+        @mutex.synchronize { @tape }
       end
 
       def stop
-        @recording = false
-        @tape
+        @mutex.synchronize do
+          @recording = false
+          @tape
+        end
       end
 
       def recording?
-        @recording
+        @mutex.synchronize { @recording }
       end
 
       class Tape
         def initialize
           @messages = []
           @start_time = nil
+          @mutex = Mutex.new
         end
 
         def add(message)
-          @start_time ||= message.timestamp
-          @messages << { message: message, time: message.timestamp - @start_time }
+          @mutex.synchronize do
+            @start_time ||= message.timestamp
+            @messages << { message: message, time: message.timestamp - @start_time }
+          end
         end
 
         def messages
-          @messages.lazy.map { |entry| entry[:message] }
+          snapshot.lazy.map { |entry| entry[:message] }
         end
 
         def message_count
-          @messages.size
+          @mutex.synchronize { @messages.size }
         end
 
         def duration
-          return 0.0 if @messages.empty?
+          entries = snapshot
+          return 0.0 if entries.empty?
 
-          @messages.last[:time]
+          entries.last[:time]
         end
 
         def play(output, speed: 1.0)
@@ -65,7 +78,7 @@ module Webmidi
         end
 
         def play_from(time, output, speed: 1.0)
-          entries = @messages.select { |e| e[:time] >= time }
+          entries = snapshot.select { |e| e[:time] >= time }
           last_time = time
 
           entries.each do |entry|
@@ -79,12 +92,12 @@ module Webmidi
         def rewind(seconds)
           target = duration - seconds
           target = 0.0 if target < 0
-          @messages.select { |e| e[:time] >= target }.map { |e| e[:message] }
+          snapshot.select { |e| e[:time] >= target }.map { |e| e[:message] }
         end
 
         def slice(from, to)
           new_tape = Tape.new
-          @messages.select { |e| e[:time] >= from && e[:time] <= to }.each do |entry|
+          snapshot.select { |e| e[:time] >= from && e[:time] <= to }.each do |entry|
             new_tape.instance_variable_get(:@messages) << {
               message: entry[:message],
               time: entry[:time] - from
@@ -92,6 +105,12 @@ module Webmidi
           end
           new_tape.instance_variable_set(:@start_time, 0.0)
           new_tape
+        end
+
+        private
+
+        def snapshot
+          @mutex.synchronize { @messages.map(&:dup) }
         end
       end
     end

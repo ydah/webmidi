@@ -66,6 +66,34 @@ RSpec.describe Webmidi::SMF::Writer do
       expect(last_event).to be_a(Webmidi::SMF::MetaEvent)
       expect(last_event.type).to eq(0x2F)
     end
+
+    it "can write running status" do
+      seq = Webmidi::SMF::Sequence.new(format: 0, ppqn: 480)
+      track = Webmidi::SMF::Track.new
+      track << Webmidi::SMF::MIDIEvent.new(message: Webmidi::Message.note_on(60), delta_time: 0)
+      track << Webmidi::SMF::MIDIEvent.new(message: Webmidi::Message.note_on(64), delta_time: 0)
+      seq.add_track(track)
+
+      binary = described_class.to_binary(seq, running_status: true)
+      expect(binary.bytes.each_cons(5).any? { |bytes| bytes == [0x90, 60, 100, 0x00, 64] }).to be true
+    end
+
+    it "validates format 0 track count before writing" do
+      seq = Webmidi::SMF::Sequence.new(format: 0, ppqn: 480)
+      expect { described_class.to_binary(seq) }.to raise_error(Webmidi::InvalidSMFError)
+    end
+
+    it "validates VLQ range" do
+      seq = Webmidi::SMF::Sequence.new(format: 0, ppqn: 480)
+      track = Webmidi::SMF::Track.new
+      track << Webmidi::SMF::MIDIEvent.new(
+        message: Webmidi::Message.note_on(60),
+        delta_time: 0x1000_0000
+      )
+      seq.add_track(track)
+
+      expect { described_class.to_binary(seq) }.to raise_error(Webmidi::InvalidSMFError, /VLQ value/)
+    end
   end
 
   describe ".write" do
