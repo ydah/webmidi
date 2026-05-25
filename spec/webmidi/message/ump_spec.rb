@@ -25,7 +25,7 @@ RSpec.describe Webmidi::Message::UMP::ChannelVoice64 do
 
   it "supports pattern matching" do
     case msg
-    in { status: :note_on, note: 60 }
+    in {status: :note_on, note: 60}
       matched = true
     end
     expect(matched).to be true

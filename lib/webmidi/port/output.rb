@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "thread"
-
 module Webmidi
   module Port
     class Output < Base
@@ -91,11 +89,11 @@ module Webmidi
 
       def send_all(*messages)
         items = if messages.size == 1 && messages.first.is_a?(Array) &&
-                   messages.first.all? { |message| message.is_a?(Message::Base) }
-                  messages.first
-                else
-                  messages
-                end
+            messages.first.all? { |message| message.is_a?(Message::Base) }
+          messages.first
+        else
+          messages
+        end
         items.each { |msg| send(msg) }
         self
       end

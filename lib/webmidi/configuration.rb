@@ -3,11 +3,11 @@
 module Webmidi
   class Configuration
     attr_accessor :transport, :fallback_transport,
-                  :default_channel, :default_velocity,
-                  :default_group,
-                  :sysex,
-                  :logger, :log_level,
-                  :timestamp_source
+      :default_channel, :default_velocity,
+      :default_group,
+      :sysex,
+      :logger, :log_level,
+      :timestamp_source
 
     def initialize
       reset!

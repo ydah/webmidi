@@ -18,7 +18,7 @@ module Webmidi
       private
 
       def normalize_map(map, from, to)
-        mapping = map || (from.nil? || to.nil? ? {} : { from => to })
+        mapping = map || ((from.nil? || to.nil?) ? {} : {from => to})
         mapping.each_with_object({}) do |(source, target), result|
           validate_channel!(source, "source channel")
           validate_channel!(target, "target channel")

@@ -7,10 +7,10 @@ module Webmidi
 
       def read(path_or_io, **options)
         data = if path_or_io.respond_to?(:read)
-                 path_or_io.read
-               else
-                 File.binread(path_or_io)
-               end
+          path_or_io.read
+        else
+          File.binread(path_or_io)
+        end
         parse(data, **options)
       end
 
@@ -23,7 +23,7 @@ module Webmidi
 
         num_tracks.times do
           track = read_track(stream, skip_unknown_chunks: skip_unknown_chunks,
-                             stop_at_end_of_track: stop_at_end_of_track)
+            stop_at_end_of_track: stop_at_end_of_track)
           sequence.add_track(track)
         end
 
@@ -124,13 +124,13 @@ module Webmidi
         high = status_byte & 0xF0
 
         bytes = case high
-                when 0xC0, 0xD0
-                  [status_byte, stream.read_byte]
-                when 0x80, 0x90, 0xA0, 0xB0, 0xE0
-                  [status_byte, stream.read_byte, stream.read_byte]
-                else
-                  raise InvalidSMFError, "Unknown MIDI status: #{format("0x%02X", status_byte)}"
-                end
+        when 0xC0, 0xD0
+          [status_byte, stream.read_byte]
+        when 0x80, 0x90, 0xA0, 0xB0, 0xE0
+          [status_byte, stream.read_byte, stream.read_byte]
+        else
+          raise InvalidSMFError, "Unknown MIDI status: #{format("0x%02X", status_byte)}"
+        end
 
         message = Message.from_bytes(bytes, normalize_note_on_zero: false)
         MIDIEvent.new(message: message, delta_time: delta_time, absolute_time: absolute_time)
@@ -141,8 +141,8 @@ module Webmidi
       end
 
       private_class_method :read_header, :read_track, :parse_event,
-                           :parse_meta_event, :parse_sysex_event, :parse_midi_event,
-                           :end_of_track?
+        :parse_meta_event, :parse_sysex_event, :parse_midi_event,
+        :end_of_track?
 
       class StringStream
         attr_reader :position
@@ -201,9 +201,9 @@ module Webmidi
         def read_uint32
           ensure_available!(4)
           val = (@data.getbyte(@position) << 24) |
-                (@data.getbyte(@position + 1) << 16) |
-                (@data.getbyte(@position + 2) << 8) |
-                @data.getbyte(@position + 3)
+            (@data.getbyte(@position + 1) << 16) |
+            (@data.getbyte(@position + 2) << 8) |
+            @data.getbyte(@position + 3)
           @position += 4
           val
         end
@@ -229,7 +229,7 @@ module Webmidi
         end
 
         def current_limit
-          (@limits && @limits.last) || @data.bytesize
+          @limits&.last || @data.bytesize
         end
       end
     end

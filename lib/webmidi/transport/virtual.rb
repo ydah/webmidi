@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "securerandom"
-require "thread"
 
 module Webmidi
   module Transport
@@ -77,7 +76,11 @@ module Webmidi
           if timeout
             @queue.pop(timeout: timeout)
           else
-            @queue.pop(true) rescue nil
+            begin
+              @queue.pop(true)
+            rescue
+              nil
+            end
           end
         end
 

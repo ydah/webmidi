@@ -70,7 +70,7 @@ RSpec.describe Webmidi::Network::RTP::Session do
   it "manages peers without duplicates" do
     session.add_peer("127.0.0.1", 5004)
     session.add_peer("127.0.0.1", 5004)
-    expect(session.peers).to eq([{ host: "127.0.0.1", port: 5004 }])
+    expect(session.peers).to eq([{host: "127.0.0.1", port: 5004}])
 
     session.remove_peer("127.0.0.1", 5004)
     expect(session.peers).to be_empty

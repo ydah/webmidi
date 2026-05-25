@@ -40,7 +40,7 @@ RSpec.describe Webmidi::Message::Channel::NoteOn do
 
   it "supports pattern matching" do
     case msg
-    in { note: 60, velocity: (80..) }
+    in {note: 60, velocity: (80..)}
       matched = true
     end
     expect(matched).to be true
@@ -86,7 +86,6 @@ RSpec.describe Webmidi::Message::Channel::NoteOff do
     parsed = Webmidi::Message.from_bytes(*msg.to_bytes)
     expect(parsed).to eq(msg)
   end
-
 end
 
 RSpec.describe Webmidi::Message::Channel::PolyphonicPressure do
@@ -100,7 +99,6 @@ RSpec.describe Webmidi::Message::Channel::PolyphonicPressure do
     parsed = Webmidi::Message.from_bytes(*msg.to_bytes)
     expect(parsed).to eq(msg)
   end
-
 end
 
 RSpec.describe Webmidi::Message::Channel::ControlChange do

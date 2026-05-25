@@ -141,13 +141,13 @@ module Webmidi
         raise InvalidSMFError, "Key signature must be between -7 and 7, got #{key.inspect}" unless key.is_a?(Integer) && key.between?(-7, 7)
 
         scale = case scale
-                when :major then 0
-                when :minor then 1
-                else scale
-                end
+        when :major then 0
+        when :minor then 1
+        else scale
+        end
         raise InvalidSMFError, "Key signature scale must be 0/:major or 1/:minor" unless [0, 1].include?(scale)
 
-        sf = key < 0 ? (256 + key) : key
+        sf = (key < 0) ? (256 + key) : key
         new(type: META_TYPES[:key_signature], data: [sf, scale], **kwargs)
       end
 
@@ -182,7 +182,7 @@ module Webmidi
       end
 
       def to_bytes
-        @data.last == 0xF7 ? [0xF0, *@data] : [0xF0, *@data, 0xF7]
+        (@data.last == 0xF7) ? [0xF0, *@data] : [0xF0, *@data, 0xF7]
       end
 
       private

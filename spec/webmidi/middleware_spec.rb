@@ -4,8 +4,14 @@ RSpec.describe Webmidi::Middleware::Stack do
   it "executes middlewares in order" do
     log = []
     stack = described_class.new do
-      use ->(msg, app) { log << "first"; app.call(msg) }
-      use ->(msg, app) { log << "second"; app.call(msg) }
+      use ->(msg, app) {
+        log << "first"
+        app.call(msg)
+      }
+      use ->(msg, app) {
+        log << "second"
+        app.call(msg)
+      }
     end
 
     stack.call(Webmidi::Message.note_on(60))

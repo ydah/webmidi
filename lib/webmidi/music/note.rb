@@ -15,15 +15,15 @@ module Webmidi
 
       def to_midi(input, validate: true)
         midi = case input
-               when Integer
-                 input
-               when Symbol
-                 parse_note_name(input.to_s)
-               when String
-                 parse_note_name(input)
-               else
-                 raise InvalidMessageError, "Cannot convert #{input.class} to MIDI note"
-               end
+        when Integer
+          input
+        when Symbol
+          parse_note_name(input.to_s)
+        when String
+          parse_note_name(input)
+        else
+          raise InvalidMessageError, "Cannot convert #{input.class} to MIDI note"
+        end
         validate_midi!(midi) if validate
         midi
       end
@@ -33,10 +33,10 @@ module Webmidi
         octave = (midi_number / 12) - 1
         note_index = midi_number % 12
         name = if sharps
-                 MIDI_TO_NAME[note_index]
-               else
-                 %w[C Db D Eb E F Gb G Ab A Bb B][note_index]
-               end
+          MIDI_TO_NAME[note_index]
+        else
+          %w[C Db D Eb E F Gb G Ab A Bb B][note_index]
+        end
         "#{name}#{octave}"
       end
 

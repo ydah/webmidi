@@ -14,7 +14,7 @@ module Webmidi
           track.each do |event|
             tick += event.delta_time
             if event.is_a?(MetaEvent) && event.type == MetaEvent::META_TYPES[:tempo]
-              tempo_events << { tick: tick, tempo: event.tempo }
+              tempo_events << {tick: tick, tempo: event.tempo}
             end
           end
         end
@@ -26,7 +26,7 @@ module Webmidi
 
         @ppqn = ppqn
         @entries = entries.map { |entry| normalize_entry(entry) }.sort_by { |entry| entry[:tick] }
-        @entries.unshift({ tick: 0, tempo: DEFAULT_TEMPO }) if @entries.empty? || @entries.first[:tick] != 0
+        @entries.unshift({tick: 0, tempo: DEFAULT_TEMPO}) if @entries.empty? || @entries.first[:tick] != 0
         freeze_entries!
       end
 
@@ -37,10 +37,10 @@ module Webmidi
 
         @entries.each_with_index do |entry, index|
           next_tick = if index + 1 < @entries.size
-                        [@entries[index + 1][:tick], ticks].min
-                      else
-                        ticks
-                      end
+            [@entries[index + 1][:tick], ticks].min
+          else
+            ticks
+          end
           break if current_tick >= ticks
 
           seconds += ticks_segment_to_seconds(next_tick - current_tick, entry[:tempo])
@@ -56,7 +56,7 @@ module Webmidi
         current_tick = 0
 
         @entries.each_with_index do |entry, index|
-          next_tick = index + 1 < @entries.size ? @entries[index + 1][:tick] : nil
+          next_tick = (index + 1 < @entries.size) ? @entries[index + 1][:tick] : nil
           segment_ticks = next_tick ? next_tick - current_tick : nil
           seconds_per_tick = entry[:tempo] / 1_000_000.0 / @ppqn
 
@@ -74,7 +74,7 @@ module Webmidi
 
       def tempo_at(ticks)
         validate_non_negative_number!(ticks, "Ticks")
-        @entries.reverse.find { |entry| entry[:tick] <= ticks }[:tempo]
+        @entries.rfind { |entry| entry[:tick] <= ticks }[:tempo]
       end
 
       private
@@ -85,7 +85,7 @@ module Webmidi
         raise InvalidSMFError, "Tempo map tick must be non-negative" unless tick.is_a?(Integer) && tick >= 0
         raise InvalidSMFError, "Tempo must be positive" unless tempo.is_a?(Integer) && tempo.positive?
 
-        { tick: tick, tempo: tempo }
+        {tick: tick, tempo: tempo}
       end
 
       def freeze_entries!

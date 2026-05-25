@@ -119,13 +119,13 @@ module Webmidi
         attr_reader :mapping, :reverse_mapping
 
         def initialize(midi_input: nil, midi_output: nil, osc_host: "127.0.0.1", osc_port: 9000, mapping: :default,
-                       reverse_mapping: :default)
+          reverse_mapping: :default)
           @midi_input = midi_input
           @midi_output = midi_output
           @osc_host = osc_host
           @osc_port = osc_port
-          @mapping = mapping == :default ? DEFAULT_MAPPINGS.dup : mapping
-          @reverse_mapping = reverse_mapping == :default ? DEFAULT_REVERSE_MAPPINGS.dup : reverse_mapping
+          @mapping = (mapping == :default) ? DEFAULT_MAPPINGS.dup : mapping
+          @reverse_mapping = (reverse_mapping == :default) ? DEFAULT_REVERSE_MAPPINGS.dup : reverse_mapping
           @socket = nil
           @running = false
           @subscription = nil

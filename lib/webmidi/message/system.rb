@@ -28,7 +28,7 @@ module Webmidi
         end
 
         def deconstruct_keys(keys)
-          { data: @data }
+          {data: @data}
         end
 
         def chunks(max_data_bytes:)
@@ -72,7 +72,7 @@ module Webmidi
         end
 
         def deconstruct_keys(keys)
-          { type: @type, value: @value }
+          {type: @type, value: @value}
         end
       end
 
@@ -92,7 +92,7 @@ module Webmidi
         end
 
         def deconstruct_keys(keys)
-          { position: @position }
+          {position: @position}
         end
       end
 
@@ -112,7 +112,7 @@ module Webmidi
         end
 
         def deconstruct_keys(keys)
-          { song: @song }
+          {song: @song}
         end
       end
 

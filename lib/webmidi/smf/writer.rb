@@ -49,7 +49,7 @@ module Webmidi
             has_end_of_track = true if event.type == MetaEvent::META_TYPES[:end_of_track]
             last_status = nil
           when SysExEvent
-            data = event.data.last == 0xF7 ? event.data : [*event.data, 0xF7]
+            data = (event.data.last == 0xF7) ? event.data : [*event.data, 0xF7]
             track_data.putc(0xF0)
             write_vlq(track_data, data.size)
             data.each { |b| track_data.putc(b) }
@@ -115,7 +115,7 @@ module Webmidi
       end
 
       private_class_method :write_header, :write_track, :write_uint16, :write_uint32, :write_vlq,
-                           :validate_sequence!, :channel_status?
+        :validate_sequence!, :channel_status?
     end
   end
 end

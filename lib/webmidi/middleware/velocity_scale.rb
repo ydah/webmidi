@@ -32,13 +32,13 @@ module Webmidi
       def apply_curve(velocity)
         normalized = velocity / 127.0
         result = case @curve
-                 when :linear
-                   normalized * @factor
-                 when :exponential
-                   (normalized**2) * @factor
-                 when :logarithmic
-                   Math.sqrt(normalized) * @factor
-                 end
+        when :linear
+          normalized * @factor
+        when :exponential
+          (normalized**2) * @factor
+        when :logarithmic
+          Math.sqrt(normalized) * @factor
+        end
         (result * 127).round.clamp(@min, @max)
       end
 

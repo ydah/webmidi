@@ -54,7 +54,7 @@ module Webmidi
         def add(message)
           @mutex.synchronize do
             @start_time ||= message.timestamp
-            @messages << { message: message, time: message.timestamp - @start_time }
+            @messages << {message: message, time: message.timestamp - @start_time}
           end
         end
 
@@ -97,7 +97,7 @@ module Webmidi
         end
 
         def slice(from, to)
-          entries = snapshot.select { |e| e[:time] >= from && e[:time] <= to }.map do |entry|
+          entries = snapshot.select { |e| e[:time].between?(from, to) }.map do |entry|
             {
               message: entry[:message],
               time: entry[:time] - from

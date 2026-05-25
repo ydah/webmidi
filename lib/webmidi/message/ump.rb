@@ -54,7 +54,7 @@ module Webmidi
         end
 
         def deconstruct_keys(keys)
-          { message_type: @message_type, group: @group }
+          {message_type: @message_type, group: @group}
         end
 
         private
@@ -150,7 +150,7 @@ module Webmidi
         attr_reader :status, :channel, :note, :velocity, :attribute_type, :attribute
 
         def initialize(status:, channel: 0, note: 0, velocity: 0, attribute_type: 0, attribute: 0, group: 0,
-                       timestamp: nil)
+          timestamp: nil)
           validate_status!(status)
           validate_range!(channel, "Channel", 0, 15)
           validate_range!(note, "Note/controller", 0, 127)
@@ -169,15 +169,15 @@ module Webmidi
 
         def to_bytes
           word1 = (MESSAGE_TYPES[:channel_voice_64] << 28) |
-                  (@group << 24) |
-                  (status_nibble << 20) |
-                  (@channel << 16) |
-                  (@note << 8) |
-                  data2
+            (@group << 24) |
+            (status_nibble << 20) |
+            (@channel << 16) |
+            (@note << 8) |
+            data2
           word2 = word2_value
 
           [(word1 >> 24) & 0xFF, (word1 >> 16) & 0xFF, (word1 >> 8) & 0xFF, word1 & 0xFF,
-           (word2 >> 24) & 0xFF, (word2 >> 16) & 0xFF, (word2 >> 8) & 0xFF, word2 & 0xFF]
+            (word2 >> 24) & 0xFF, (word2 >> 16) & 0xFF, (word2 >> 8) & 0xFF, word2 & 0xFF]
         end
 
         def deconstruct_keys(keys)
@@ -234,11 +234,11 @@ module Webmidi
 
         def to_bytes
           word = (MESSAGE_TYPES[:channel_voice_32] << 28) |
-                 (@group << 24) |
-                 (status_nibble << 20) |
-                 (@channel << 16) |
-                 (@data1 << 8) |
-                 @data2
+            (@group << 24) |
+            (status_nibble << 20) |
+            (@channel << 16) |
+            (@data1 << 8) |
+            @data2
 
           [(word >> 24) & 0xFF, (word >> 16) & 0xFF, (word >> 8) & 0xFF, word & 0xFF]
         end
@@ -472,10 +472,10 @@ module Webmidi
       end
 
       private_class_method :parse_words, :parse_channel_voice32, :parse_channel_voice64,
-                           :downgrade_channel_voice64, :type_from_word, :status_from_nibble,
-                           :validate_words!, :scale_7_to_16, :scale_16_to_7,
-                           :scale_7_to_32, :scale_32_to_7, :scale_14_to_32,
-                           :scale_32_to_14
+        :downgrade_channel_voice64, :type_from_word, :status_from_nibble,
+        :validate_words!, :scale_7_to_16, :scale_16_to_7,
+        :scale_7_to_32, :scale_32_to_7, :scale_14_to_32,
+        :scale_32_to_14
     end
   end
 end

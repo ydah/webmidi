@@ -8,7 +8,7 @@ module Webmidi
 
     attr_reader :sysex_enabled
 
-    alias sysex_enabled? sysex_enabled
+    alias_method :sysex_enabled?, :sysex_enabled
 
     def initialize(sysex: false, transport: nil)
       @sysex_enabled = sysex

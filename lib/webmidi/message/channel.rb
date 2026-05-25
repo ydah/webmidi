@@ -39,7 +39,7 @@ module Webmidi
         end
 
         def deconstruct_keys(keys)
-          { note: @note, velocity: @velocity, channel: @channel }
+          {note: @note, velocity: @velocity, channel: @channel}
         end
       end
 
@@ -61,7 +61,7 @@ module Webmidi
         end
 
         def deconstruct_keys(keys)
-          { note: @note, velocity: @velocity, channel: @channel }
+          {note: @note, velocity: @velocity, channel: @channel}
         end
       end
 
@@ -83,7 +83,7 @@ module Webmidi
         end
 
         def deconstruct_keys(keys)
-          { note: @note, pressure: @pressure, channel: @channel }
+          {note: @note, pressure: @pressure, channel: @channel}
         end
       end
 
@@ -140,7 +140,7 @@ module Webmidi
         end
 
         def deconstruct_keys(keys)
-          { cc: @cc, value: @value, channel: @channel }
+          {cc: @cc, value: @value, channel: @channel}
         end
 
         def self.controller_number(controller)
@@ -169,7 +169,7 @@ module Webmidi
         end
 
         def deconstruct_keys(keys)
-          { program: @program, channel: @channel }
+          {program: @program, channel: @channel}
         end
       end
 
@@ -189,7 +189,7 @@ module Webmidi
         end
 
         def deconstruct_keys(keys)
-          { pressure: @pressure, channel: @channel }
+          {pressure: @pressure, channel: @channel}
         end
       end
 
@@ -217,7 +217,7 @@ module Webmidi
         end
 
         def deconstruct_keys(keys)
-          { value: @value, channel: @channel }
+          {value: @value, channel: @channel}
         end
 
         def signed_value
@@ -227,7 +227,7 @@ module Webmidi
         def self.from_signed(value, channel: 0, timestamp: nil)
           unless value.is_a?(Integer) && value.between?(SIGNED_MIN, SIGNED_MAX)
             raise InvalidMessageError,
-                  "Signed pitch bend value must be between #{SIGNED_MIN} and #{SIGNED_MAX}, got #{value.inspect}"
+              "Signed pitch bend value must be between #{SIGNED_MIN} and #{SIGNED_MAX}, got #{value.inspect}"
           end
 
           new(value: value + CENTER, channel: channel, timestamp: timestamp)

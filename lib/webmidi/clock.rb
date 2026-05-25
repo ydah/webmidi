@@ -8,7 +8,7 @@ module Webmidi
 
     attr_reader :bpm, :running
 
-    alias running? running
+    alias_method :running?, :running
 
     def initialize(bpm: 120)
       validate_bpm!(bpm)
@@ -111,7 +111,7 @@ module Webmidi
 
     def safely_call(callback, tick)
       callback.call(tick)
-    rescue StandardError => e
+    rescue => e
       error_callbacks = @mutex.synchronize { @error_callbacks.dup }
       error_callbacks.each { |cb| cb.call(e, tick) }
     end

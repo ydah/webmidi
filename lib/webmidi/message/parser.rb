@@ -90,7 +90,7 @@ module Webmidi
             else
               validate_status!(byte)
               pending = [byte]
-              needed = byte == 0xF0 ? :sysex : message_length(byte)
+              needed = (byte == 0xF0) ? :sysex : message_length(byte)
               last_channel_status = byte if channel_status?(byte)
             end
           elsif needed == :sysex
@@ -243,9 +243,9 @@ module Webmidi
       def validate_exact_length!(bytes, expected)
         return if bytes.length == expected
 
-        detail = bytes.length < expected ? "Expected" : "Expected exactly"
+        detail = (bytes.length < expected) ? "Expected" : "Expected exactly"
         raise InvalidMessageError,
-              "#{detail} #{expected} bytes for #{format_byte(bytes[0])}, got #{bytes.length}"
+          "#{detail} #{expected} bytes for #{format_byte(bytes[0])}, got #{bytes.length}"
       end
 
       def validate_sysex_data_or_end!(byte)
@@ -272,7 +272,7 @@ module Webmidi
         end
 
         raise InvalidMessageError,
-              "Expected #{needed} bytes for #{format_byte(pending[0])}, got #{pending.length}"
+          "Expected #{needed} bytes for #{format_byte(pending[0])}, got #{pending.length}"
       end
 
       def real_time_status?(byte)
@@ -288,12 +288,12 @@ module Webmidi
       end
 
       private_class_method :parse_note_off, :parse_note_on, :parse_polyphonic_pressure,
-                           :parse_control_change, :parse_program_change, :parse_channel_pressure,
-                           :parse_pitch_bend, :parse_system, :parse_sysex, :message_length,
-                           :validate_bytes!, :validate_status!, :invalid_status!,
-                           :validate_exact_length!, :validate_sysex_data_or_end!,
-                           :validate_sysex_data!, :message_complete?, :raise_incomplete!,
-                           :real_time_status?, :channel_status?, :format_byte
+        :parse_control_change, :parse_program_change, :parse_channel_pressure,
+        :parse_pitch_bend, :parse_system, :parse_sysex, :message_length,
+        :validate_bytes!, :validate_status!, :invalid_status!,
+        :validate_exact_length!, :validate_sysex_data_or_end!,
+        :validate_sysex_data!, :message_complete?, :raise_incomplete!,
+        :real_time_status?, :channel_status?, :format_byte
     end
   end
 end

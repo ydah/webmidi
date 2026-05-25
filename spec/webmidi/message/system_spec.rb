@@ -23,7 +23,7 @@ RSpec.describe Webmidi::Message::System::SysEx do
 
   it "supports pattern matching" do
     case msg
-    in { data: [0x7E, *] }
+    in {data: [0x7E, *]}
       matched = true
     end
     expect(matched).to be true

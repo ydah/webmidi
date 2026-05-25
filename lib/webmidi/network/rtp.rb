@@ -125,9 +125,7 @@ module Webmidi
           self
         end
 
-        def port
-          @port
-        end
+        attr_reader :port
 
         def connect_to(host, port)
           start unless @running
@@ -137,13 +135,13 @@ module Webmidi
 
         def add_peer(host, port)
           validate_peer!(host, port)
-          peer = { host: host, port: port }
+          peer = {host: host, port: port}
           @mutex.synchronize { @peers << peer unless @peers.include?(peer) }
           self
         end
 
         def remove_peer(host, port)
-          @mutex.synchronize { @peers.delete({ host: host, port: port }) }
+          @mutex.synchronize { @peers.delete({host: host, port: port}) }
           self
         end
 
@@ -153,13 +151,13 @@ module Webmidi
 
         def send(message)
           bytes = case message
-                  when Message::Base
-                    message.to_bytes
-                  when Array
-                    message
-                  else
-                    raise InvalidMessageError, "Expected Message or Array"
-                  end
+          when Message::Base
+            message.to_bytes
+          when Array
+            message
+          else
+            raise InvalidMessageError, "Expected Message or Array"
+          end
 
           packet = Packet.new(
             sequence_number: next_sequence,
@@ -227,7 +225,7 @@ module Webmidi
               end
             rescue IOError, SystemCallError
               break
-            rescue StandardError => e
+            rescue => e
               notify_error(e, data)
             end
           end

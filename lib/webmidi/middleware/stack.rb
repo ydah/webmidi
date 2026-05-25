@@ -26,10 +26,10 @@ module Webmidi
         @middlewares.reverse_each do |middleware, options|
           current_app = endpoint
           endpoint = if middleware.is_a?(Proc)
-                       lambda_adapter(middleware, current_app)
-                     else
-                       middleware.new(current_app, **options)
-                     end
+            lambda_adapter(middleware, current_app)
+          else
+            middleware.new(current_app, **options)
+          end
         end
         @app_cache = endpoint
       end
