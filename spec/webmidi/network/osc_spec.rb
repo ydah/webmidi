@@ -22,6 +22,17 @@ RSpec.describe Webmidi::Network::OSC::Encoder do
       expect(address).to eq("/volume")
       expect(args.first).to be_within(0.001).of(0.75)
     end
+
+    it "raises on missing null terminators" do
+      expect { described_class.decode_message("/bad".b) }
+        .to raise_error(Webmidi::InvalidMessageError, /null terminator/)
+    end
+
+    it "raises on truncated arguments" do
+      data = described_class.encode_string("/bad") + described_class.encode_string(",i") + "\x00".b
+      expect { described_class.decode_message(data) }
+        .to raise_error(Webmidi::InvalidMessageError, /ended/)
+    end
   end
 end
 
@@ -37,5 +48,32 @@ RSpec.describe Webmidi::Network::OSC::Bridge do
       m[Webmidi::Message::Channel::NoteOn] = "/custom/note"
     end
     expect(bridge.mapping[Webmidi::Message::Channel::NoteOn]).to eq("/custom/note")
+  end
+
+  it "does not register duplicate MIDI callbacks when started twice" do
+    registrations = 0
+    midi_input = Class.new do
+      define_method(:on_message) do |&block|
+        registrations += 1
+        Webmidi::CallbackSubscription.new {}
+      end
+    end.new
+
+    bridge = described_class.new(midi_input: midi_input)
+    bridge.start
+    bridge.start
+    bridge.stop
+
+    expect(registrations).to eq(1)
+  end
+
+  it "converts OSC messages to MIDI" do
+    bridge = described_class.new
+    data = Webmidi::Network::OSC::Encoder.encode_message("/midi/note/on", 2, 60, 100)
+
+    message = bridge.receive_osc(data)
+
+    expect(message).to be_a(Webmidi::Message::Channel::NoteOn)
+    expect(message.channel).to eq(2)
   end
 end
